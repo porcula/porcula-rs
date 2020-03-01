@@ -1,0 +1,128 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Cписок жанров</title>
+    <link rel="stylesheet" href="site.css" />
+</head>
+<body>
+    <h1>Cписок жанров <a href="home.html">назад</a></h1>
+    <button id="expand_all">раскрыть</button>
+    Фильтр <input type="text" id="substr" value="">
+    <table class="result">
+        <thead><tr><th colspan=2>Жанр</th><th>Книг</th></tr></thead>
+        <tbody></tbody>
+    </table>
+    <style>
+        .L1 { padding-left:0; font-weight: bold; }
+        .L2 { padding-left:4em }
+        .v { width: 5em; text-align: right; }
+        .expand { font-size: 120%; font-weight: bold; cursor: pointer; vertical-align: top; }
+    </style>
+    <script src="jquery-1.12.4.min.js"></script>
+    <script src="common.js"></script>
+    <script>
+        var translation;
+        var category;
+        $.when(
+            $.getJSON("genre/translation", function (data) { translation = data; }),
+        ).then(function(){ 
+            $.getJSON("facet", {path:"/genre"}, function (facet) {
+                // {path: count-value}, path ::= '/genre/<category>'
+                var max = 0;
+                for (var path in facet) {
+                    var v = +facet[path];
+                    if (v > max) max = v;
+                    var match = path.match(/([^\/]+)$/);
+                    if (!match) continue;
+                    var code = match[1];
+                    var t = translation[code] || code;
+                    facet[path] = {
+                        v: v,
+                        t: t,
+                        k: code == 'misc' ? '' : t //sort key, 'misc' goes down
+                    };
+                }
+                var ordered = sort_keys(facet);
+                var tab = "";
+                for (var i in ordered) {
+                    var path = ordered[i];
+                    var t = facet[path].t;
+                    var v = facet[path].v;
+                    var pct = Math.trunc((1 * v) / max * 100 / 5) * 5;
+                    if (pct > 100) pct = 100;
+                    var url = 'home.html?query='+ encodeURIComponent('facet:"' + path + '"');
+                    tab += '<tr class="row"><td class="expand" data-path="'+path+'">+</td><td class="L1"><a href="'+url+'" class="tdlink">' 
+                        + esc(t) + '</a></td><td class="v gauge g' + pct + '">' + v + '</td></tr>';
+                }
+                $(".result tbody").html(tab);
+                filter_list();
+            });
+        });
+
+        $(".result tbody").on("click",".expand", function(){ expand(this); });
+        $("#expand_all").click(function(){
+            $(".expand").each(function(){ expand(this); });
+        });
+
+        function expand(node) {
+            var td = $(node);
+            var root = td.data("path");
+            var row = td.parent();
+            td.removeClass("expand");
+            td.text("");
+            $.getJSON("facet", {path:root}, function (facet) {
+                // {path: count-value}, path ::= '/genre/<category>/<genre>'
+                var max = 0;
+                for (var path in facet) {
+                    if (path==undefined) continue;
+                    var v = +facet[path];
+                    if (v > max) max = v;
+                    if (v < 5) { //слишком редкий жанр - скорее всего ошибка
+                        delete facet[path];
+                        continue;
+                    }
+                    var match = path.match(/([^\/]+)$/);
+                    if (!match) continue;
+                    var code = match[1];
+                    var t = translation[code] || code;
+                    facet[path] = { v: v, t: t, k: t };
+                }
+                var ordered = sort_keys(facet);
+                var tab = "";
+                for (var i in ordered) {
+                    var path = ordered[i];
+                    var t = facet[path].t;
+                    var v = facet[path].v;
+                    var pct = Math.trunc((1 * v) / max * 100 / 5) * 5;
+                    if (pct > 100) pct = 100;
+                    var url = 'home.html?query='+ encodeURIComponent('facet:"' + path + '"');
+                    tab += '<tr class="row"><td></td><td class="L2"><a href="'+url+'" class="tdlink">' 
+                        + esc(t) + '</a></td><td class="v gauge g' + pct + '">' + v + '</td></tr>';
+                }
+                row.after(tab);
+                filter_list();
+            });
+        }
+
+        function filter_list() {
+            var re = new RegExp($("#substr").val(), 'i');
+            $(".row").hide().filter(function () {
+                return !!$('td:nth-of-type(2)', this).text().match(re);
+            }).show();
+        }
+        $("#substr").change(filter_list).keyup(filter_list);
+
+        function sort_keys(obj) {
+            var keys = Object.keys(obj);
+            return keys.sort(function(a,b) {
+                var a = obj[a].k;
+                var b = obj[b].k;
+                if (a=="" || a==undefined) return +1; //to end
+                if (b=="") return -1; //to end
+                return a.localeCompare(b);
+            });
+        }
+    </script>
+</body>
+</html>

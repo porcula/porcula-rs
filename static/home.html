@@ -1,0 +1,448 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Книги</title>
+    <link rel="stylesheet" href="site.css" />
+    <link rel="search" type="application/opensearchdescription+xml" title="Porcula" href="opensearch"/>
+</head>
+<body>
+    <div class="container body-content">
+        <div id="filter">
+            Поиск:
+            <button id="show_query_hint" class="mh">?</button>
+            <input id="query" name="query" type="text" maxlength="1000" value="" />
+            <button id="search">Искать</button>
+            <a class="list" href="genres.html">Жанры</a>
+            <a class="list" href="authors.html">Авторы</a>
+            <div id="extra_tools" class="mh">
+                <span>Всего книг: <span id="book_count"></span></span>
+                <span class="at_field">
+                    <span data-field="title">название</span>
+                    <span data-field="author">автор</span>
+                    <span data-field="translator">переводчик</span>
+                    <span data-field="sequence">серия</span>
+                    <span data-field="annotation">аннотация</span>
+                    <span data-field="body">текст</span>
+                    <span data-field="genre">жанр</span>
+                </span>
+                <span>
+                    <label for="page_size" class="hdiv">Строк на странице:</label>
+                    <select id="page_size">
+                        <option value="20">20</option>
+                        <option value="100">100</option>
+                        <option value="1000">1000</option>
+                    </select>
+                </span>
+            </div>
+        </div>
+        <div id="query_hint" style="display:none">
+            <ul class="itemizedlist" type="disc">
+                <li class="listitem"><p>оператор И: </p><pre class="programlisting">hello AND world</pre></li>
+                <li class="listitem"><p>оператор ИЛИ: </p><pre class="programlisting">hello OR world</pre></li>
+                <li class="listitem"><p>оператор НЕ:</p><pre class="programlisting">hello -title:world</pre></li>
+                <li class="listitem"><p>поиск по полям: </p><pre class="programlisting">title:hello AND body:world</pre></li>
+                <li class="listitem"><p>поиск фразы: </p><pre class="programlisting">"hello world"</pre></li>
+                <li class="listitem"><p>поиск в интервале: </p><pre class="programlisting">title:[a TO c]</pre></li>
+                <li class="listitem"><p>поиск в интервале (не включая): </p><pre class="programlisting">title:{a TO c}</pre></li>
+            </ul>
+        </div>
+
+        <div id="res_wrapper" style="display:none">
+            <div class="nav top">
+                <button class="prev">&lt;</button>
+                <button class="next">&gt;</button>
+                Страница: <span id="page"></span>
+                Книг: <span id="total"></span>
+                <button class="expand">детально</button>
+            </div>
+            <table id="result">
+                <thead>
+                    <tr>
+                        <th class="default order" data-order="default" title="Сортировать по релевантности">▼</th>
+                        <th class="random order" data-order="random" title="В случайном порядке">?</th>
+                        <th class="title order" data-order="title" title="Сортировать по названию">Название</th>
+                        <th class="author order" data-order="author" title="Сортировать по автору">Автор</th>
+                        <th class="translator order mh" data-order="translator" title="Сортировать по переводчику">Перевод</th>
+                        <th class="sequence order mh" data-order="sequence" colspan="2" title="Сортировать по серии">Серия</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <div id="error"></div>
+            <div class="nav bottom">
+                <button class="next bottom">далее...</button>
+            </div>
+        </div>
+    </div>
+    <div id="loading" style="display:none"></div>
+
+
+    <script src="jquery-1.12.4.min.js"></script>
+    <script src="common.js"></script>
+    <script>
+        var size100pct = 5000000;
+        var page = 0;
+        var page_size = 20;
+        var last_page = 0;
+        var order = "default";
+        var genre_translation = {};
+        var ebook = is_ebook();
+
+        $("#search").click(function(){
+            page = 0;
+            search();
+        });
+        $("#query").change(function () {
+            page = 0;
+        });
+
+        $("#page_size").change(function () {
+            page_size = $("#page_size").val();
+            page = 0;
+        });
+
+        $(".prev").click(go_prev_page);
+        $(".next").click(function(){ go_next_page($(this).hasClass("bottom")) });
+
+        function go_prev_page() {
+            page--;
+            if (page < 0) page = 0;
+            search(false);
+        }
+        function go_next_page(append) {
+            page++;
+            if (page > last_page) page = last_page;
+            search(append);
+        }
+        function go_first_page() {
+            page = 0;
+            search(false);
+        }
+        function go_last_page() {
+            page = last_page;
+            search(false);
+        }
+        function dec_page_size() {
+            if (page_size == 20) return;
+            var skip = page * page_size;
+            if (page_size == 100) { page_size = 20; }
+            else if (page_size == 1000) { page_size = 100; }
+            $("#page_size").val(page_size);
+            page = Math.trunc(skip / page_size);
+            search(false);
+        }
+        function inc_page_size() {
+            if (page_size == 1000) return;
+            var skip = page * page_size;
+            if (page_size == 100) { page_size = 1000; }
+            else if (page_size == 20) { page_size = 100; }
+            $("#page_size").val(page_size);
+            page = Math.trunc(skip / page_size);
+            search(false);
+        }
+
+        $(".at_field span").click(function () {
+            var f = $(this).data("field") + ':';
+            var q = $("#query");
+            var v = q.val();
+            var i = q[0].selectionStart;
+            var j = q[0].selectionEnd;
+            var s1 = i > 0 ? v.substring(0, i - 1) : "";
+            var s2 = j < v.length ? v.substring(j) : "";
+            if (s1.length > 0 && s1.substring(-1) != ' ') s1 += ' ';
+            var s = s1.length + f.length;
+            q.val(s1 + f + s2).focus();
+            q[0].selectionStart = q[0].selectionEnd = s;
+        });
+
+        function search(append) {
+            $("#res_wrapper").hide();
+            $("#query_hint").hide();
+            if (!append) $("#result tbody").empty();
+            $("#error").empty();
+            $("#page").text("");
+            $("#total").text("");
+            $(".nav .expand").removeClass("expanded");
+            var query = $("#query").val();
+            if (query == "") return;
+            $(".order").removeClass("ordered");
+            $(".order[data-order='" + order + "']").addClass("ordered");
+            var skip = page * page_size;
+            $('#total').text("");
+            $.ajax({
+                url: "search",
+                data: { "query": query, "order": order, "limit": page_size, "offset": skip },
+                dataType: "json",
+                success: function (data) {
+                    try {
+                        renderResult(data,append);
+                    } catch (e) {
+                        $("#result").text(e.message);
+                    }
+                },
+                error: function (x, o, e) {
+                    $(".nav").hide();
+                    $("#res_wrapper").show();
+                    var text = e ? e : "Сервер недоступен " + x.statusText;
+                    if (x.responseText) text += "<br>" + x.responseText;
+                    $('#error').html(text);
+                }
+            });
+        }
+
+        function renderResult(data, append) {
+            if (typeof (data) == "string") data = JSON.parse(data);
+            $("#res_wrapper").show();
+            $(".nav").show();
+            var total = data.total || 0;
+            var books_left = total - (page + 1) * page_size;
+            last_page = Math.trunc((total+page_size-1) / page_size)-1;
+            try {
+                $(".prev").prop('disabled', page <= 0);
+                $(".next").prop('disabled', books_left <= 0);
+            } catch (e) {
+                //ignore ONYX eBook browser error: 'undefined is not a function'
+            }
+            $(".next.bottom").toggle(books_left > 0);
+            $("#page").text((total==0 ? 0 : (page + 1)) + " / " + (last_page + 1));
+            $("#total").text(total);
+            var find_words = encodeURIComponent(extract_query_words($("#query").val()));
+
+            var tab = '';
+            for (var i in data.matches) {
+                var r = data.matches[i];
+                var ex = function (attr) { return r[attr]!=undefined && r[attr].length>0 };
+                var v = function (attr) { return r[attr]==undefined ? "" : (r[attr][0]==undefined ? "" : r[attr][0]) };
+                var val = function (attr,delim) { return r[attr]==undefined ? "" : r[attr].join(delim) }
+                var vale = function (attr, delim) { return esc(val(attr,delim)) };
+                var valz = function (attr) { var x=v(attr); return x=="" || x=="0" ? "" : +x };
+                var zipfile = "";
+                var filename = "";
+                var facet = r["facet"];
+                for (var f in facet) {
+                    var m = facet[f].match(/\/file\/([^\/]+)\/([^\/]+)/);
+                    if (m) {
+                        zipfile = m[1];
+                        filename = m[2];
+                        break;
+                    }
+                }
+                if (filename=="WHOLE") continue;
+                var genre = r["genre"];
+                if (genre!=undefined) {
+                    for (var i in genre) {
+                        var g = genre[i];
+                        genre[i] = esc( genre_translation[g] || g );
+                    }
+                    genre = genre.sort().join(", ");
+                }
+                var size_pct = Math.trunc(valz("length") / size100pct * 100 / 5) * 5;
+                if (size_pct > 100) size_pct = 100;
+                var book_url = "book/" + encodeURIComponent(zipfile) + "/" + encodeURIComponent(filename);
+                var saveas = name_for_download(v("title"), filename);
+                var down_url = book_url + "/" + encodeURIComponent(saveas);
+                var read_url = down_url;
+                var read_target = "_self";
+                if (!ebook) { //enable HTML rendering
+                    read_url = book_url + '/render?find=' + find_words;
+                    read_target = "_blank";
+                }
+                var cover_url = v("cover") != "0" ? book_url + "/cover" : "";
+                var row_class = "list" + (append && tab=='' ? " appended" : "");
+                tab += '<tr class="' + row_class + '" data-row="' + r + '" data-cover="' + cover_url + '">'
+                    + '<td class="action gauge g' + size_pct + '" colspan="2"><a target="' + read_target + '" href="' + read_url + '">Читать</a></td>'
+                    + '<td class="title">' + (vale("title"," / ")||filename) + '</td>'
+                    + '<td class="author">' + vale("author",", ") + '</td>'
+                    + '<td class="mh translator">' + vale("translator",", ") + '</td>'
+                    + '<td class="mh sequence">' + vale("sequence",", ") + '</td>'
+                    + '<td class="mh seqnum">' + valz("seqnum") + '</td>'
+                    + '</tr>'
+                    ;
+                tab += '<tr class="detail hidden">'
+                    + '<td class="action" colspan="2"><a href="' + down_url + '"><img class="download cover" src="defcover.png"></a></td>'
+                    + '<td colspan="6"><div class="gridc">'
+                    + (ex("translator") ? '<div class="n translator">Переводчик</div><div class="v translator">' + vale("translator",", ") + '</div>' : '')
+                    + (ex("src_author") ? '<div class="n2 src_author">Ориг.автор</div><div class="v2 src_author">' + vale("src_author",", ") + '</div>' : '')
+                    + (ex("sequence") ? '<div class="n ms sequence">Серия</div><div class="v ms sequence">' + vale("sequence",", ") + " " + valz("seqnum") + '</div>' : '')
+                    + (ex("date") ? '<div class="n date">Дата</div><div class="v date">' + vale("date"," / ") + '</div>' : '')
+                    + '<div class="n2 lang">Язык</div><div class="v2 lang">' + vale("lang"," ← ") + '</div>'
+                    + '<div class="n genre">Жанр</div><div class="v genre">' + (genre||'-') + '</div>'
+                    + '<div class="n2 length">Длина</div><div class="v2 length">' + size_pretty(valz("length")) + '</div>'
+                    + (ex("annotation") ? '<div class="n annotation">Аннотация</div><div class="v-span annotation">' + vale("annotation") + '</div>' : '')
+                    + '</div></td></tr>'
+                    ;
+            }
+            if (append) {
+                var last_row = $("#result tr:visible").last()[0];
+                $("#result tr.appended").removeClass("appended");
+                $("#result tbody").append(tab);
+                last_row.scrollIntoView(true);
+            }
+            else {
+                $("#result tbody").html(tab);
+            }
+        }
+
+        $("#result").on("click", "td.title", function () {
+            var tr = $(this).parent();
+            if (tr.hasClass("expanded")) {
+                collapseRow(tr);
+            } else {
+                expandRow(tr);
+            }
+        });
+        $(".nav .expand").click(function () {
+            var expand = !$(this).hasClass("expanded");
+            var fn = expand ? expandRow : collapseRow;
+            $(this).toggleClass("expanded", expand);
+            $("#result tr.list").each(function () { fn($(this)); });
+        });
+
+        $(".order").click(function () {
+            order = $(this).data("order");
+            page = 0;
+            search(false);
+        });
+
+        function expandRow(tr) {
+            var detail = tr.next();
+            tr.addClass("expanded");
+            $("td.title", tr).removeClass("gauge");
+            var cover = tr.data("cover");
+            if (cover) {
+                $("td.action img", detail).attr("src", cover);
+            }
+            detail.removeClass('hidden');
+        }
+        function collapseRow(tr) {
+            var detail = tr.next();
+            tr.removeClass("expanded");
+            $("td.title", tr).addClass("gauge");
+            detail.addClass('hidden');
+        }
+
+        $("#result").on("click", "td.author", function (e) {
+            $("#query").val((e.ctrlKey ? $("#query").val() + " " : "") + 'author:"' + $(this).text() + '"');
+            order = "title";
+            page = 0;
+            search(false);
+        });
+
+        $("#result").on("click", "td.sequence", function (e) {
+            $("#query").val((e.ctrlKey ? $("#query").val() + " " : "") + 'sequence:"' + $(this).text() + '"');
+            order = "sequence";
+            page = 0;
+            search(false);
+        });
+
+        $("#show_query_hint").click(function () {
+            $("#query_hint").toggle();
+        });
+
+        $("#query").keypress(function (event) {
+            if (event.which == 13) {
+                event.preventDefault();
+                page = 0;
+                search(false);
+            }
+        });
+        document.onkeydown = function (e) {
+            if (!e) e = window.event;
+            if (e.keyCode == 83 && document.activeElement.id != "query") { //s=Search
+                e.preventDefault();
+                $("#query").focus();
+                return;
+            }
+            if (!e.altKey || e.shiftKey || e.ctrlKey) return; //alt only
+            switch (e.keyCode) {
+                case 35: e.preventDefault(); go_last_page(); break; //End
+                case 36: e.preventDefault(); go_first_page(); break; //Home
+                case 37: e.preventDefault(); go_prev_page(); break; //Left
+                case 39: e.preventDefault(); go_next_page(); break; //Right
+                case 38: e.preventDefault(); dec_page_size(); break; //Up
+                case 40: e.preventDefault(); inc_page_size(); break; //Down
+            }
+        }
+
+        function extract_query_words(query) {
+            // exclude field:, -NOT, "quote"
+            var tokens = query.replace(/[\/\\!#$%&'()*+,.@;<=>?[\]^`{|}~]+/g, " ").trim().split(/\s+/);
+            var quoted = false;
+            var m = "";
+            var words = [];
+            for (var i = 0; i < tokens.length; i++) {
+                var t = tokens[i];
+                var q = t.indexOf('"');
+                if (quoted) {
+                    m += " " + t;
+                    if (q >= 0) {
+                        quoted = false;
+                        words.push(m.replace(/"/g, '').trim());
+                    }
+                }
+                else {
+                    if (t[0] != '-') {
+                        if (q >= 0) {
+                            if (t.lastIndexOf('"') > q) {
+                                words.push(t.replace(/"/g, '').trim());
+                            }
+                            else {
+                                quoted = true;
+                                m = t;
+                            }
+                        }
+                        else {
+                            if (t.length > 2) {
+                                words.push(t.trim());
+                            }
+                        }
+                    }
+                }
+            }
+            var list = ""; //words.map.join
+            for (var i = 0; i < words.length; i++) {
+                if (words[i].substring(0,6)=="facet:") continue;
+                if (list.length > 0) list += ",";
+                list += words[i].replace(/^\w+:/, "");
+            }
+            return list;
+        }
+
+        function name_for_download(title, filename) {
+            var safe = title.replace(/[&%#{}\[\]<>|:*?\\/\000\001\002\003\004\005\006\007\010\011\012\013\014\015\016\017\020\021\022\023\024\025\026\027\030\031\032\033\034\035\036\037]+/g, '_');
+            var ext = filename.match(/\.[^.]+$/);
+            return safe.substring(0, 127) + ((ext && ext.length > 0) ? ext[0] : ".fb2");
+        }
+
+        //parse request params
+        var qs = (function (a) {
+            if (a == "") return {};
+            var b = {};
+            for (var i = 0; i < a.length; ++i) {
+                var p = a[i].split('=', 2);
+                if (p.length == 1)
+                    b[p[0]] = "";
+                else
+                    b[p[0]] = decodeURIComponent(p[1].replace(/\+/g, " "));
+            }
+            return b;
+        })(window.location.search.substring(1).split('&'));
+        if (qs["query"] != "") {
+            $("#query").val(qs["query"]);
+        }
+        $("#query").focus();
+
+        //load data
+        $("#book_count").load("book/count");
+        $.when(
+            $.getJSON("genre/translation", function (data) { genre_translation = data; }),
+        ).then(function(){ 
+            if ($("#query").val() != "") {
+                search(false);
+            }
+        });
+
+    </script>
+</body>
+</html>

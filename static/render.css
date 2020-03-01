@@ -1,0 +1,154 @@
+﻿body {
+    margin: auto;
+    max-width: 60em;
+    color: #2c2c2c;
+    background-color: #eeeddc;
+    font-family: Arial;
+    font-size: 14pt;
+    line-height: 20pt;
+}
+img { max-width: 60em; }
+@media (min-width: 320px) and (max-width: 480px) {
+    body {
+        max-width: 30em;
+    }
+    img { max-width: 30em; }
+}
+.body { 
+    display: block; 
+    margin-bottom: 1em;
+    padding-bottom: 1em;
+    border-bottom: 2px solid #777;
+}
+.title {
+    font-size: larger;
+    font-weight: bold;
+    margin-top: 1em;
+    cursor: default;
+    color: #2c2c2c;
+}
+.subtitle {
+    font-size: large;
+    font-weight: bold;
+}
+.section {
+    padding: 1em 1em 1em 1em;
+    border-top: 1px dotted #777;
+    font-size: medium;
+    font-weight: normal;
+}
+.cite {
+    margin-left: 5em;
+    text-shadow: 1px 1px 0.5px #ddd;
+    font-style: italic;
+}
+.epigraph {
+    margin-left: 20%;
+    font-style: italic;
+}
+.text-author {
+  text-align: right;
+}
+.empty-line {
+    padding-top: 1em;
+}
+strong {
+    font-weight: bold;
+}
+em {
+    font-weight: bold;
+    font-style: italic;
+}
+strong::before, strong::after, em::before, em::after {
+    content: " ";
+}
+:target { background-color: #ffd; }
+
+p {
+    text-align: justify;
+    text-indent: 2em;
+}
+
+.goback {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    width: 120px;
+    height: 100%;
+}
+.show_toc {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 1;
+    width: 120px;
+    height: 100%;
+}
+.goback:hover, .show_toc:hover {
+    background-color: #e6ead6;
+}
+.toc {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100vh;
+    overflow: scroll;
+    z-index: 2;
+    min-width: 30%;
+    max-width: 70%;
+    background-color: #ffd;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    font-size: 75%;
+}
+.toc a {
+    text-decoration: none;
+}
+.toc a.current {
+    background-color: #b8d3cb;
+}
+.toc .hide {
+    position: fixed;
+    top: 4px;
+    right: 2px;
+    font: 12pt Arial;
+    border: 1px dotted #777;
+    border-radius: 4px;
+    margin-right: 1em;
+    padding: 0 0.3em 0 0.3em;
+    cursor: pointer;
+    background-color: #d88;
+}
+
+
+.find_words {
+    position: sticky;
+    z-index: 1;
+    bottom: 0;
+    background-color: #eee;
+}
+.find_words .word {
+    font: 12pt Arial;
+    border: 1px dotted #777;
+    border-radius: 4px;
+    margin-right:1em;
+    padding: 0 0.3em 0 0.3em;
+    cursor: pointer;
+}
+.find_words .hide {
+    font: 12pt Arial;
+    border: 1px dotted #777;
+    border-radius: 4px;
+    margin-right:1em;
+    padding: 0 0.3em 0 0.3em;
+    cursor: pointer;
+    background-color: #d88;
+    position: absolute;
+    right: 0;
+}
+
+.backlink, .backlink:visited {
+    color: #2c2c2c;
+    text-decoration: none;
+}

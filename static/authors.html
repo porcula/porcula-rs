@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Cписок авторов</title>
+    <link rel="stylesheet" href="site.css" />
+</head>
+<body>
+    <h1>Cписок авторов <a href="home.html">назад</a></h1>
+    <div id="letters"></div>
+    Фильтр <input type="text" id="substr" value="">
+    <table id="list">
+        <thead>
+            <th>Фамилия</th><th>Книг</th>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <script src="jquery-1.12.4.min.js"></script>
+    <script src="common.js"></script>
+    <script>
+        function filter_list() {
+            var re = new RegExp($("#substr").val(), 'i');
+            $(".row").hide().filter(function () {
+                return !!$('td:first-of-type', this).text().match(re);
+            }).show();
+        }
+        $("#substr").change(filter_list).keyup(filter_list);
+
+        $.getJSON("facet", {path:"/author"}, function (facet) {
+            var max = 0;
+            var filtered = {};
+            for (var i in facet) {
+                var m = i.match(/^\/author\/([A-ZА-ЯЁ])/i);
+                if (m) {
+                    var v = +facet[i];
+                    filtered[m[1]] = v;
+                    if (v>max) max = v;
+                }
+            }
+            var html = "";
+            var ordered = sort_keys(filtered);
+            for (var i in ordered) {
+                var n = ordered[i];
+                var v = filtered[n];
+                var pct = Math.trunc((1 * v) / max * 100 / 5) * 5;
+                if (pct > 100) pct = 100;
+                var cls = 'bk' + pct;
+                html += '<span class="prefix gauge bk'+pct+'">'+esc(n)+'</span>';
+            }
+            $("#letters").html(html);
+        });
+
+        $("#letters").on("click",".prefix",function(){
+            var letter = $(this).text();
+            $.getJSON("facet", {path:"/author/"+letter}, function (facet) {
+                var max = 0;
+                for (var i in facet) {
+                    var v = +facet[i];
+                    if (v>max) max = v;
+                }
+                var html = "";
+                var ordered = sort_keys(facet);
+                for (var i in ordered) {
+                    var path = ordered[i];
+                    var v = facet[path];
+                    var n = path.substring(10);
+                    var pct = Math.trunc((1 * v) / max * 100 / 5) * 5;
+                    if (pct > 100) pct = 100;
+                    var cls = 'bk' + pct;
+                    var url = 'home.html?query='+encodeURIComponent('facet:"'+path+'"');
+                    html += '<tr class="row"><td class="author gauge g'+pct+'"><a class="tdlink" href="'+url+'">'+esc(n)+'</a></td><td class="right">'+v+'</td></tr>';
+                }
+                $("#list tbody").html(html);
+            });
+        });
+
+        function sort_keys(obj) {
+            var keys = Object.keys(obj);
+            return keys.sort(function(a,b) {
+                return a.localeCompare(b);
+            });
+        }
+    </script>
+</body>
+</html>

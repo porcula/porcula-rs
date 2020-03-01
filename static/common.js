@@ -1,0 +1,29 @@
+﻿function esc(unsafe) {
+    if (!(typeof (unsafe) === "string")) return unsafe;
+    return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+function is_ebook() {
+    return !!window.navigator.userAgent.match(/QtEmbedded|QtWebEngine/);
+}
+
+if (!Math.trunc) { //polyfill for old eBooks
+    Math.trunc = function (v) {
+        v = +v;
+        if (!isFinite(v)) return v;
+        return (v - v % 1) || (v < 0 ? -0 : v === 0 ? v : 0);
+    };
+}
+
+function size_pretty(s) {
+    if (s < 1024) { return s + ""; }
+    s = Math.trunc(s / 1024);
+    if (s < 1024) { return s + "K"; }
+    s = Math.trunc(s / 1024);
+    if (s < 1024) { return s + "M"; }
+    s = Math.trunc(s / 1024);
+    return s + "G";
+}
+
+$(document).ajaxStart(function () { $("#loading").show(); });
+$(document).ajaxStop(function () { $("#loading").hide(); });

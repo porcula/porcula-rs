@@ -1,0 +1,369 @@
+# Двухуровневая категоризация жанров с расшифровкой кодов
+# Формат:
+#     /код=название категории
+#     код=название жанра
+#     ...
+# код должен быть в нижнем регистре и не содержать символов / и =
+# список жанров взят с https://coollib.net/g
+# все отсутствующие в списке жанры попадут в категорию "Прочее"
+
+/military=Военное дело
+
+military_arts=Боевые искусства
+nonf_military=Военная документалистика
+military_history=Военная история
+military_weapon=Военная техника и вооружение
+military=Военное дело
+prose_military=О войне
+military_special=Спецслужбы
+
+/business=Деловая литература
+
+banking=Банковское дело
+accounting=Бухучет и аудит
+global_economy=Внешняя торговля
+paper_work=Делопроизводство
+org_behavior=Корпоративная культура
+personal_finance=Личные финансы
+small_business=Малый бизнес
+marketing=Маркетинг, PR, реклама
+real_estate=Недвижимость
+popular_business=О бизнесе популярно
+industries=Отраслевые издания
+job_hunting=Поиск работы, карьера
+economics_ref=Справочники
+trade=Торговля
+management=Управление, подбор персонала
+stock=Ценные бумаги, инвестиции
+economics=Экономика
+
+/detective=Детективы и Триллеры
+
+det_action=Боевик
+det_cozy=Дамский детективный роман
+sf_detective=Детективная фантастика
+detective=Детективы
+child_det=Детские остросюжетные
+det_irony=Иронический детектив
+det_history=Исторический детектив
+det_classic=Классический детектив
+det_crime=Криминальный детектив
+det_hard=Крутой детектив
+det_maniac=Маньяки
+thriller_medical=Медицинский триллер
+det_political=Политический детектив
+det_police=Полицейский детектив
+thriller_psychology=Психологический триллер
+det_su=Советский детектив
+thriller_techno=Техно триллер
+thriller=Триллер
+det_espionage=Шпионский детектив
+thriller_legal=Юридический триллер
+
+/documental=Документальная литература
+
+nonf_biography=Биографии и Мемуары
+travel_notes=География, путевые заметки
+nonfiction=Документальная литература
+sci_popular=Научпоп
+adv_animal=Природа и животные
+nonf_publicism=Публицистика
+adv_geo=Путешествия и география
+
+/home=Домоводство (Дом и семья)
+
+auto_regulations=Автомобили и ПДД
+home_pets=Домашние животные
+home=Домоводство
+home_health=Здоровье
+home_collecting=Коллекционирование
+home_cooking=Кулинария
+home_entertain=Развлечения
+home_garden=Сад и огород
+home_diy=Сделай сам
+family=Семейные отношения
+home_sport=Спорт
+home_crafts=Хобби и ремесла
+home_sex=Эротика, Секс
+
+/drama=Драматургия
+
+drama_antique=Античная драма
+vaudeville=Водевиль, буффонада
+drama=Драма
+dramaturgy=Драматургия
+screenplays=Киносценарии
+mystery=Мистерия
+scenarios=Сценарии
+tragedy=Трагедия
+
+/art=Искусство, Искусствоведение, Дизайн
+
+architecture_book=Архитектура и скульптура
+painting=Живопись, альбомы, иллюстрированные каталоги
+design=Искусство и Дизайн
+art_criticism=Искусствоведение
+cine=Кино
+nonf_criticism=Критика
+sci_culture=Культурология
+art_world_culture=Мировая художественная культура
+music=Музыка
+notes=Партитуры
+theatre=Театр
+
+/computer=Компьютеры и Интернет
+
+comp_hard=Аппаратное обеспечение, компьютерное железо
+comp_db=Базы данных
+comp_www=Интернет
+computers=Околокомпьютерная литература, зарубежная компьютерная
+comp_osnet=ОС и Сети
+comp_programming=Программирование
+comp_soft=Программы
+tbg_computers=Учебные пособия, самоучители
+comp_dsp=Цифровая обработка сигналов
+
+/child=Литература для детей
+
+children=Детская литература: прочее
+child_education=Детская образовательная литература
+child_prose=Детская проза
+child_adv=Детские приключения
+child_verse=Детские стихи
+child_folklore=Детский фольклор
+foreign_children=Зарубежная литература для детей
+child_classical=Классическая детская литература
+prose_game=Книга-игра
+ya=Подростковая литература
+child_tale_rus=Русские сказки
+child_tale=Сказка
+
+/love=Любовные романы
+
+love_history=Исторические любовные романы
+love_short=Короткие любовные романы
+love_sf=Любовная фантастика
+love_detective=Любовные детективы
+love=О любви
+love_hard=Порно
+love_slash=Слэш
+love_contemporary=Современные любовные романы
+love_femslash=Фемслеш
+love_erotica=Эротика
+
+/science=Наука, Образование
+
+sci_medicine_alternative=Альтернативная медицина
+sci_theories=Альтернативные науки и научные теории
+sci_anachem=Аналитическая химия
+sci_cosmos=Астрономия и Космос
+sci_biology=Биология
+sci_biophys=Биофизика
+sci_biochem=Биохимия
+sci_botany=Ботаника
+sci_veterinary=Ветеринария
+sci_oriental=Востоковедение
+sci_geo=Геология и география
+sci_state=Государство и право
+sci_business=Деловая литература
+psy_childs=Детская психология
+sci_zoo=Зоология
+foreign_language=Иностранные языки
+sci_history=История
+sci_philology=Литературоведение
+sci_math=Математика
+sci_medicine=Медицина
+science=Научная литература
+sci_pedagogy=Педагогика
+sci_politics=Политика
+sci_psychology=Психология
+psy_theraphy=Психотерапия и консультирование
+sci_religion=Религиоведение
+sci_abstract=Рефераты
+psy_sex_and_family=Секс и семейная психология
+sci_social_studies=Социология
+sci_phys=Физика
+sci_physchem=Физическая химия
+sci_philosophy=Философия
+sci_chem=Химия
+sci_ecology=Экология
+sci_economy=Экономика
+sci_juris=Юриспруденция
+sci_linguistic=Языкознание
+
+/poetry=Поэзия
+
+fable=Басни
+in_verse=в стихах
+vers_libre=Верлибры
+poetry_for_classical=Классическая зарубежная поэзия
+poetry_classical=Классическая поэзия
+poetry_rus_classical=Классическая русская поэзия
+lyrics=Лирика
+palindromes=Палиндромы
+song_poetry=Песенная поэзия
+poetry=Поэзия
+poetry_east=Поэзия Востока
+poem=Поэма, эпическая поэзия
+poetry_modern=Современная поэзия
+poetry_rus_modern=Современная русская поэзия
+experimental_poetry=Экспериментальная поэзия
+epic_poetry=Эпическая поэзия
+
+/adventure=Приключения
+
+adv_story=Авантюрный роман
+adv_western=Вестерн
+adv_history=Исторические приключения
+adv_maritime=Морские приключения
+adventure=Приключения
+adv_modern=Приключения в современном мире
+adv_indian=Приключения про индейцев
+tale_chivalry=Рыцарский роман
+
+/prose=Проза
+
+dissident=Антисоветская литература
+aphorisms=Афоризмы и цитаты
+foreign_prose=Зарубежная классическая проза
+prose_history=Историческая проза
+prose_classic=Классическая проза
+literature_18=Классическая проза XVII-XVIII веков
+literature_19=Классическая проза ХIX века
+literature_20=Классическая проза ХX века
+prose_counter=Контркультура
+prose_magic=Магический реализм
+story=Новелла
+great_story=Повесть
+prose=Проза
+short_story=Рассказ
+roman=Роман
+prose_rus_classic=Русская классическая проза
+sagas=Семейный роман/Семейная сага
+prose_sentimental=Сентиментальная проза
+prose_su_classics=Советская классическая проза
+prose_contemporary=Современная проза
+prose_abs=Фантасмагория, абсурдистская проза
+extravaganza=Феерия
+prose_neformatny=Экспериментальная, неформатная проза
+epistolary_fiction=Эпистолярная проза
+prose_epic=Эпопея
+essay=Эссе, очерк, этюд, набросок
+
+/misc=Прочее
+
+periodic=Газеты и журналы
+visual_arts=Изобразительное искусство, фотография
+beginning_authors=Начинающие авторы
+unfinished=Недописанное
+other=Неотсортированное
+network_literature=Самиздат, сетевая литература
+fanfiction=Фанфик
+
+/religion=Религия и духовность
+
+astrology=Астрология
+religion_budda=Буддизм
+religion_hinduism=Индуизм
+religion_islam=Ислам
+religion_judaism=Иудаизм
+religion_catholicism=Католицизм
+religion_orthodoxy=Православие
+religion_protestantism=Протестантизм
+religion=Религиозная литература
+religion_rel=Религия
+religion_self=Самосовершенствование
+palmistry=Хиромантия
+religion_christianity=Христианство
+religion_esoterics=Эзотерика
+religion_paganism=Язычество
+
+/reference=Справочная литература
+
+geo_guides=Путеводители
+ref_guide=Руководства
+ref_dict=Словари
+reference=Справочная литература
+ref_ref=Справочники
+ref_encyc=Энциклопедии
+
+/antique=Старинное
+
+antique_ant=Античная литература
+antique_east=Древневосточная литература
+antique_european=Древнеевропейская литература
+antique_russian=Древнерусская литература
+antique_myths=Мифы. Легенды. Эпос
+antique=Старинная литература
+
+/technics=Техника
+
+equ_history=История техники
+sci_metal=Металлургия
+sci_radio=Радиоэлектроника
+sci_build=Строительство и сопромат
+sci_tech=Технические науки
+sci_transport=Транспорт и авиация
+
+/textbook=Учебники и пособия
+
+sci_textbook=Учебники
+tbg_higher=Учебники и пособия ВУЗов
+tbg_secondary=Учебники и пособия для среднего и специального образования
+tbg_school=Школьные учебники и пособия, рефераты
+sci_crib=Шпаргалки
+
+/fiction=Фантастика
+
+sf_history=Альтернативная история
+sf_action=Боевая фантастика
+fantasy_fight=Боевое фэнтези
+sf_heroic=Героическая фантастика
+sf_fantasy_city=Городское фэнтези
+gothic_novel=Готический роман
+child_sf=Детская фантастика
+sf_irony=Ироническая фантастика
+sf_fantasy_irony=Ироническое фэнтези
+historical_fantasy=Историческое фэнтези
+sf_cyberpunk=Киберпанк
+sf_space=Космическая фантастика
+sf_space_opera=Космоопера
+sf_litrpg=ЛитРПГ
+sf_mystic=Мистика
+sf=Научная Фантастика
+nsf=Ненаучная фантастика
+popadanec=Попаданцы
+sf_postapocalyptic=Постапокалипсис
+fairy_fantasy=Сказочная фантастика
+russian_fantasy=Славянское фэнтези
+modern_tale=Современная сказка
+sf_social=Социальная фантастика
+sf_stimpank=Стимпанк
+sf_technofantasy=Технофэнтези
+sf_horror=Ужасы
+sf_etc=Фантастика
+sf_fantasy=Фэнтези
+dragon_fantasy=Фэнтези про драконов
+hronoopera=Хроноопера
+sf_epic=Эпическая фантастика
+sf_humor=Юмористическая фантастика
+humor_fantasy=Юмористическое фэнтези
+
+/folk=Фольклор
+
+epic=Былины
+riddles=Загадки
+folk_songs=Народные песни
+folk_tale=Народные сказки
+proverbs=Пословицы, поговорки
+folklore=Фольклор
+limerick=Частушки, прибаутки, потешки
+
+/humor=Юмор
+
+humor_anecdote=Анекдоты
+comedy=Комедия
+humor_satire=Сатира
+humor=Юмор
+humor_prose=Юмористическая проза
+humor_verse=Юмористические стихи
