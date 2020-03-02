@@ -68,18 +68,19 @@ fn main() {
         .version("0.1")
         .about("Full-text search on collection of e-books")
         .arg(Arg::with_name("index-dir")
-            .default_value(DEFAULT_INDEX_DIR)
             .short("i")
             .long("index-dir")
             .takes_value(true)
             .value_name("DIR")
+            .default_value(DEFAULT_INDEX_DIR)
             .help("Index directory, read/write"))
         .arg(Arg::with_name("books-dir")
             .short("b")
             .long("books-dir")
             .takes_value(true)
             .value_name("DIR")
-            .help("Books directory, read only. Default: ./books"))
+            .default_value(DEFAULT_BOOKS_DIR)
+            .help("Books directory, read only"))
         .arg(Arg::with_name("debug")
             .short("d")
             .long("debug")
@@ -158,27 +159,47 @@ fn main() {
         .get_matches();
 
     let debug = matches.is_present("debug");
+    let books_dir_required = matches.subcommand_matches("query").is_none()
+        && matches.subcommand_matches("facet").is_none();
 
     let index_dir = String::from(matches.value_of("index-dir").unwrap_or(DEFAULT_INDEX_DIR));
-    let index_path = Path::new(&index_dir);
+    let index_path = Path::new(&index_dir).to_path_buf();
+    //auto-create index directory when indexing
     if !index_path.exists() && matches.subcommand_matches("index").is_some() {
-        eprintln!("Index directory not exists '{}', creating", &index_dir);
+        eprintln!(
+            "Not exists index directory: {}, creating",
+            index_path.display()
+        );
         match std::fs::create_dir(&index_path) {
             Ok(()) => eprintln!(
-                "created directory {}",
+                "Directory created: {}",
                 index_path.canonicalize().unwrap().display()
             ),
-            Err(e) => panic!("Error {}", e),
+            Err(e) => {
+                eprintln!("Error creating directory: {}", e);
+                std::process::exit(1);
+            }
         }
     }
-    let index_path = Path::new(&index_dir).canonicalize().unwrap();
+    let index_path = index_path.canonicalize().unwrap_or_else(|_| {
+        eprintln!(
+            "Not found index directory: {}\nRun 'index' command or use --index-dir=... option",
+            index_path.display()
+        );
+        std::process::exit(1);
+    });
 
+    // loading settings stored with index
     let settings_filename = index_path.join(SETTINGS_FILE);
     let mut settings: Settings = match std::fs::File::open(&settings_filename) {
-        Ok(f) => serde_json::from_reader(f).expect(&format!(
-            "Invalid settings file {}",
-            settings_filename.display()
-        )),
+        Ok(f) => serde_json::from_reader(f).unwrap_or_else(|e| {
+            eprintln!(
+                "Invalid settings file: {}: {}",
+                settings_filename.display(),
+                e
+            );
+            std::process::exit(2);
+        }),
         Err(_) => Settings {
             langs: vec![DEFAULT_LANGUAGE.to_string()],
             books_dir: DEFAULT_BOOKS_DIR.to_string(),
@@ -186,33 +207,43 @@ fn main() {
         },
     };
 
-    match matches.value_of("books-dir") {
-        Some(dir) => settings.books_dir = dir.to_string(),
-        None => (),
+    // books-dir overrided in command line?
+    if matches.occurrences_of("books-dir") > 0 {
+        if let Some(dir) = matches.value_of("books-dir") {
+            settings.books_dir = dir.to_string();
+        }
     }
-    let books_path = Path::new(&settings.books_dir).canonicalize().unwrap();
-    if !books_path.exists() && matches.subcommand_matches("query").is_none() {
-        eprintln!(
-            "Books directory not exists '{}' -> {}",
-            &settings.books_dir,
-            books_path.display()
-        );
-        std::process::exit(1);
+    let mut books_path = Path::new(&settings.books_dir).to_path_buf();
+    if books_dir_required {
+        books_path = books_path.canonicalize().unwrap_or_else(|_| {
+            eprintln!(
+                "Not found books directory: {}\nUse --books-dir=... option",
+                settings.books_dir
+            );
+            std::process::exit(1);
+        });
     }
 
+    let genre_map_filename = "genre-map.txt";
     let genre_map = {
-        let filename = "genre-map.txt";
-        let genre_map_path = Path::new(DEFAULT_ASSETS_DIR).join(filename);
-        if genre_map_path.exists() { //load file
+        let genre_map_path = Path::new(DEFAULT_ASSETS_DIR).join(genre_map_filename);
+        if genre_map_path.exists() {
+            //load file
             let mut f = BufReader::new(std::fs::File::open(genre_map_path).unwrap());
-            GenreMap::load(&mut f).unwrap()
-        }
-        else { //include static asset
-            let data = assets::get(filename).expect("Genre map not found").content;
+            GenreMap::load(&mut f)
+        } else {
+            //load static asset
+            let data = assets::get(genre_map_filename)
+                .expect("Genre map not found")
+                .content;
             let mut f = BufReader::new(data);
-            GenreMap::load(&mut f).unwrap()
+            GenreMap::load(&mut f)
         }
-    };
+    }
+    .unwrap_or_else(|_| {
+        eprintln!("Invalid file: {}", genre_map_filename);
+        std::process::exit(1);
+    });
 
     //////////////////////INDEXING MODE
     if let Some(matches) = matches.subcommand_matches("index") {
@@ -274,8 +305,16 @@ fn main() {
         "Empty language list in {}",
         settings_filename.display()
     );
+
     //open index
-    let fts = BookReader::new(index_dir, &settings.langs[0]).unwrap();
+    let fts = BookReader::new(&index_path, &settings.langs[0]).unwrap_or_else(|e| {
+        eprintln!(
+            "Error opening index in '{}': {}\nTry to rebuild with 'index full' command",
+            index_path.display(),
+            e
+        );
+        std::process::exit(4);
+    });
 
     //////////////////////QUERY MODE
     if let Some(matches) = matches.subcommand_matches("query") {
@@ -342,8 +381,8 @@ fn main() {
         let mut maybe_file = url.split('/').skip(1); //skip root /
         if let Some(filename) = maybe_file.next() {
             if let Some(asset) = assets::get(filename) {
-                let res = Response::from_data(asset.content_type, asset.content)
-                    .with_public_cache(86400);
+                let res =
+                    Response::from_data(asset.content_type, asset.content).with_public_cache(86400);
                 return res;
             }
         }
