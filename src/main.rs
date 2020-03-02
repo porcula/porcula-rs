@@ -9,6 +9,8 @@ extern crate tantivy;
 extern crate zip;
 #[macro_use]
 extern crate rouille;
+#[macro_use]
+extern crate lazy_static;
 
 use clap::{Arg, SubCommand};
 use rouille::{Request, Response};
@@ -21,6 +23,7 @@ use std::io::BufReader;
 use std::path::Path;
 use std::time::Instant;
 
+mod assets;
 mod fb2_parser;
 mod fts;
 mod genre_map;
@@ -198,9 +201,17 @@ fn main() {
     }
 
     let genre_map = {
-        let genre_map_path = Path::new(DEFAULT_ASSETS_DIR).join("genre-map.txt");
-        let mut f = std::io::BufReader::new(std::fs::File::open(genre_map_path).unwrap());
-        GenreMap::load(&mut f).unwrap()
+        let filename = "genre-map.txt";
+        let genre_map_path = Path::new(DEFAULT_ASSETS_DIR).join(filename);
+        if genre_map_path.exists() { //load file
+            let mut f = BufReader::new(std::fs::File::open(genre_map_path).unwrap());
+            GenreMap::load(&mut f).unwrap()
+        }
+        else { //include static asset
+            let data = assets::get(filename).expect("Genre map not found").content;
+            let mut f = BufReader::new(data);
+            GenreMap::load(&mut f).unwrap()
+        }
     };
 
     //////////////////////INDEXING MODE
@@ -325,6 +336,16 @@ fn main() {
         let res = rouille::match_assets(&req, DEFAULT_ASSETS_DIR);
         if res.is_success() {
             return res;
+        }
+        // match included asset
+        let url = &req.url();
+        let mut maybe_file = url.split('/').skip(1); //skip root /
+        if let Some(filename) = maybe_file.next() {
+            if let Some(asset) = assets::get(filename) {
+                let res = Response::from_data(asset.content_type, asset.content)
+                    .with_public_cache(86400);
+                return res;
+            }
         }
 
         router!(req,

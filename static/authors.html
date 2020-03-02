@@ -9,7 +9,7 @@
     <h1>Cписок авторов <a href="home.html">назад</a></h1>
     <div id="letters"></div>
     Фильтр <input type="text" id="substr" value="">
-    <table id="list">
+    <table id="list" style="display:none">
         <thead>
             <th>Фамилия</th><th>Книг</th>
         </thead>
@@ -51,6 +51,7 @@
         });
 
         $("#letters").on("click",".prefix",function(){
+            $("#list").show();
             var letter = $(this).text();
             $.getJSON("facet", {path:"/author/"+letter}, function (facet) {
                 var max = 0;
