@@ -158,8 +158,8 @@ fn file_facet(zipfile: &str, filename: &str) -> Facet {
     Facet::from_text(&path)
 }
 
-fn get_tokenizer<'a>(lang: &str) -> TextAnalyzer {
-    let language = match lang {
+fn get_tokenizer<'a>(stemmer: &str) -> TextAnalyzer {
+    let language = match stemmer {
         "ar" => Language::Arabic,
         "da" => Language::Danish,
         "nl" => Language::Dutch,
@@ -193,7 +193,7 @@ fn is_char_allowed_in_genre_code(c: char) -> bool {
 impl BookWriter {
     pub fn new<P: AsRef<Path>>(
         index_dir: P,
-        lang: &str,
+        stemmer: &str,
         num_threads: Option<usize>,
         heap_size: usize,
     ) -> Result<BookWriter> {
@@ -214,7 +214,7 @@ impl BookWriter {
         };
         index
             .tokenizers()
-            .register(TOKENIZER_NAME, get_tokenizer(lang));
+            .register(TOKENIZER_NAME, get_tokenizer(stemmer));
 
         let writer = match num_threads {
             Some(n) if n > 0 => index.writer_with_num_threads(n, heap_size)?,

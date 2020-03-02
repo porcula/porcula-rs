@@ -52,6 +52,7 @@ const DEFAULT_COVER_IMAGE: &'static str = "defcover.png";
 #[derive(Serialize, Deserialize)]
 struct Settings {
     langs: Vec<String>,
+    stemmer: String,
     books_dir: String,
     no_body: bool,
 }
@@ -92,8 +93,16 @@ fn main() {
                 .long("lang")
                 .takes_value(true)
                 .multiple(true)
+                .use_delimiter(true)
                 .value_name("2 letter code | ANY")
-                .help(&format!("Language of books, one or more. First language defines stemming rules. Default: {}", DEFAULT_LANGUAGE)))
+                .default_value(DEFAULT_LANGUAGE)
+                .help(&format!("Language of books, one or more")))
+            .arg(Arg::with_name("stemmer")
+                .long("stemmer")
+                .takes_value(true)
+                .value_name("language code | OFF")
+                .default_value(DEFAULT_LANGUAGE)
+                .help(&format!("Word stemmer for primary language")))
             .arg(Arg::with_name("INDEX-MODE")
                 .required(true)
                 .index(1)
@@ -202,6 +211,7 @@ fn main() {
         }),
         Err(_) => Settings {
             langs: vec![DEFAULT_LANGUAGE.to_string()],
+            stemmer: DEFAULT_LANGUAGE.to_string(),
             books_dir: DEFAULT_BOOKS_DIR.to_string(),
             no_body: false,
         },
@@ -247,14 +257,21 @@ fn main() {
 
     //////////////////////INDEXING MODE
     if let Some(matches) = matches.subcommand_matches("index") {
-        if let Some(v) = matches.values_of_lossy("language") {
-            settings.langs = v;
-        };
+        if matches.occurrences_of("language") > 0 {
+            if let Some(v) = matches.values_of_lossy("language") {
+                settings.langs = v;
+            }
+        }
         assert!(
             settings.langs.len() > 0,
             "No language specified nor on command line [--lang=..], nor in settings file {}",
             settings_filename.display()
         );
+        if matches.occurrences_of("stemmer") > 0 {
+            if let Some(v) = matches.value_of("stemmer") {
+                settings.stemmer = v.to_string();
+            }
+        }
         let delta = match matches.value_of("INDEX-MODE") {
             Some("full") => false,
             _ => true,
@@ -276,7 +293,7 @@ fn main() {
         //open index
         let mut book_writer = BookWriter::new(
             index_path,
-            &settings.langs[0],
+            &settings.stemmer,
             num_threads,
             heap_size * 1024 * 1024,
         )
@@ -580,10 +597,11 @@ fn reindex(
         }
     }
     println!(
-        "-----START INDEXING dir={} delta={} lang={:?} no_body={} files={:?}",
+        "-----START INDEXING dir={} delta={} lang={:?} stemmer={} no_body={} files={:?}",
         &settings.books_dir,
         delta,
         &lang_set,
+        &settings.stemmer,
         settings.no_body,
         book_formats.keys()
     );

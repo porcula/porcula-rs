@@ -7,11 +7,11 @@
     font-size: 14pt;
     line-height: 20pt;
 }
-img { max-width: 60em; }
+img { 
+    max-width: 60em; 
+}
 @media (min-width: 320px) and (max-width: 480px) {
-    body {
-        max-width: 30em;
-    }
+    body { max-width: 30em; }
     img { max-width: 30em; }
 }
 .body { 
@@ -48,6 +48,14 @@ img { max-width: 60em; }
 }
 .text-author {
   text-align: right;
+}
+.code {
+    display: inline;
+    font-family: 'Courier New', Courier, monospace;
+}
+.strikethrough {
+    display: inline;
+    text-decoration: line-through;
 }
 .empty-line {
     padding-top: 1em;

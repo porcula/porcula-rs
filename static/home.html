@@ -184,7 +184,7 @@
                 error: function (x, o, e) {
                     $(".nav").hide();
                     $("#res_wrapper").show();
-                    var text = e ? e : "Сервер недоступен " + x.statusText;
+                    var text = e ? e : "Сервер недоступен";
                     if (x.responseText) text += "<br>" + x.responseText;
                     $('#error').html(text);
                 }
