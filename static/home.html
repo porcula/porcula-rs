@@ -239,8 +239,18 @@
                 }
                 var size_pct = Math.trunc(valz("length") / size100pct * 100 / 5) * 5;
                 if (size_pct > 100) size_pct = 100;
+                var tarr = r["title"];
+                var prim_title = filename;
+                var title = filename;
+                if (tarr != undefined && tarr.length > 0) {
+                    prim_title = tarr[0];
+                    title = '<span class="prim">'+esc(prim_title)+'</span>';
+                    if (tarr.length > 1) {
+                        title += '<span class="src">' + esc(tarr.slice(1).join(' / ')) + '</span>';
+                    }
+                }
                 var book_url = "book/" + encodeURIComponent(zipfile) + "/" + encodeURIComponent(filename);
-                var saveas = name_for_download(v("title"), filename);
+                var saveas = name_for_download(prim_title, filename);
                 var down_url = book_url + "/" + encodeURIComponent(saveas);
                 var read_url = down_url;
                 var read_target = "_self";
@@ -252,7 +262,7 @@
                 var row_class = "list" + (append && tab=='' ? " appended" : "");
                 tab += '<tr class="' + row_class + '" data-row="' + r + '" data-cover="' + cover_url + '">'
                     + '<td class="action gauge g' + size_pct + '" colspan="2"><a target="' + read_target + '" href="' + read_url + '">Читать</a></td>'
-                    + '<td class="title">' + (vale("title"," / ")||filename) + '</td>'
+                    + '<td class="title">' + title + '</td>'
                     + '<td class="author">' + vale("author",", ") + '</td>'
                     + '<td class="mh translator">' + vale("translator",", ") + '</td>'
                     + '<td class="mh sequence">' + vale("sequence",", ") + '</td>'
@@ -436,7 +446,7 @@
         //load data
         $("#book_count").load("book/count");
         $.when(
-            $.getJSON("genre/translation", function (data) { genre_translation = data; }),
+            $.getJSON("genre/translation", function (data) { genre_translation = data; })
         ).then(function(){ 
             if ($("#query").val() != "") {
                 search(false);

@@ -25,7 +25,7 @@
         var translation;
         var category;
         $.when(
-            $.getJSON("genre/translation", function (data) { translation = data; }),
+            $.getJSON("genre/translation", function (data) { translation = data; })
         ).then(function(){ 
             $.getJSON("facet", {path:"/genre"}, function (facet) {
                 // {path: count-value}, path ::= '/genre/<category>'
@@ -78,7 +78,7 @@
                     if (path==undefined) continue;
                     var v = +facet[path];
                     if (v > max) max = v;
-                    if (v < 5) { //слишком редкий жанр - скорее всего ошибка
+                    if (v < 2) { //слишком редкий жанр - скорее всего ошибка
                         delete facet[path];
                         continue;
                     }

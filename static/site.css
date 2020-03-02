@@ -165,9 +165,12 @@ td.title {
     min-width: 10em;
     cursor: pointer;
 }
+.title .src { 
+    font-size: 80%; display: block; 
+}
 .author {
     min-width: 10em;
-    max-width: 30em;
+    max-width: 20em;
 }
 td.author {
     color: #044;
@@ -456,6 +459,12 @@ tr.expanded td.author {
 
     .title {
         width: auto;
+    }
+    .title .prim {
+        font-size: 14pt;
+    }
+    .title .src {
+        font-size: 10pt;
     }
 
     .author {
