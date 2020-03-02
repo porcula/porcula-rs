@@ -329,7 +329,7 @@ fn main() {
                     std::process::exit(0);
                 }
                 Err(e) => {
-                    eprintln!("Query error {}", e);
+                    eprintln!("Query error: {}", e);
                     std::process::exit(2);
                 }
             }
@@ -344,7 +344,7 @@ fn main() {
                     std::process::exit(0);
                 }
                 Err(e) => {
-                    eprintln!("Query error {}", e);
+                    eprintln!("Query error: {}", e);
                     std::process::exit(2);
                 }
             }
@@ -424,10 +424,10 @@ fn handler_search(req: &Request, fts: &BookReader, debug: bool) -> Response {
                 .parse()
                 .unwrap_or(0);
             let order: String = req.get_param("order").unwrap_or(String::from("default"));
-            Response::from_data(
-                "application/json",
-                fts.search(&query, &order, limit, offset, debug).unwrap(),
-            )
+            match fts.search(&query, &order, limit, offset, debug) {
+                Ok(json) =>  Response::from_data("application/json", json),
+                Err(e) => Response::text(e.to_string()).with_status_code(500),
+            }
         }
         None => Response::empty_404(),
     }
@@ -435,7 +435,11 @@ fn handler_search(req: &Request, fts: &BookReader, debug: bool) -> Response {
 
 fn handler_facet(req: &Request, fts: &BookReader) -> Response {
     match req.get_param("path") {
-        Some(path) => Response::json(&fts.get_facet(&path).unwrap()),
+        Some(path) => 
+            match fts.get_facet(&path) {
+                Ok(ref data) => Response::json(data),
+                Err(e) => Response::text(e.to_string()).with_status_code(500),
+            },
         None => Response::empty_404(),
     }
 }

@@ -436,7 +436,7 @@ impl BookReader {
         let searcher = self.reader.searcher();
         let query = self.parse_query(query, debug)?;
         if debug {
-            println!("DEBUG query={:?}", &query)
+            println!("debug: query={:?}", &query)
         }
         let mut matches = Vec::<String>::new();
         if order == "default" {
