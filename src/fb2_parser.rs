@@ -466,13 +466,14 @@ impl BookFormat for FB2BookFormat {
                 XMode::Annotation | XMode::Body => match &event {
                     Ok(Event::Start(ref e)) => {
                         match e.name() {
-                            b"a" | b"p" | b"strong" | b"sup" | b"sub" | b"table" | b"tr"
-                            | b"th" | b"td" => res.push(Event::Start(e.to_owned())), //keep as is
+                            b"p" | b"strong" | b"sup" | b"sub" | b"table" | b"tr" | b"th"
+                            | b"td" => res.push(Event::Start(e.to_owned())), //keep as is
                             b"emphasis" => res.push(Event::Start(BytesStart::borrowed_name(b"em"))),
-                            b"image" => {
+                            b"a" | b"image" => {
+                                //remove namespace from href="ns:xxx"
                                 if let Some(a) = get_attr_raw(b"href", &mut e.attributes()) {
                                     let mut href = a.value.to_vec();
-                                    if href.len() > 0 && href[0] == b'#' {
+                                    if e.name()==b"image" && href.len() > 0 && href[0] == b'#' {
                                         href.remove(0); // "#link" -> "link"
                                     }
                                     let attrs = vec![Attribute {
@@ -480,7 +481,8 @@ impl BookFormat for FB2BookFormat {
                                         value: Cow::Owned(href),
                                     }];
                                     let tag = Event::Start(
-                                        BytesStart::borrowed_name(b"img").with_attributes(attrs),
+                                        BytesStart::owned_name(e.name().to_vec())
+                                            .with_attributes(attrs),
                                     );
                                     res.push(tag);
                                 }
@@ -530,7 +532,7 @@ impl BookFormat for FB2BookFormat {
         for event in res {
             match event {
                 Event::Start(ref e) => {
-                    if e.name() == b"img" {
+                    if e.name() == b"image" {
                         if let Some(href) = get_attr_raw(b"href", &mut e.attributes()) {
                             if let Some(i) = img.get(&href.value) {
                                 let mut src = b"data:".to_vec();
