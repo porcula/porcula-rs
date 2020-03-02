@@ -466,9 +466,8 @@ impl BookFormat for FB2BookFormat {
                 XMode::Annotation | XMode::Body => match &event {
                     Ok(Event::Start(ref e)) => {
                         match e.name() {
-                            b"a" | b"p" | b"strong" | b"sup" | b"sub" => {
-                                res.push(Event::Start(e.to_owned()))
-                            } //keep as is
+                            b"a" | b"p" | b"strong" | b"sup" | b"sub" | b"table" | b"tr"
+                            | b"th" | b"td" => res.push(Event::Start(e.to_owned())), //keep as is
                             b"emphasis" => res.push(Event::Start(BytesStart::borrowed_name(b"em"))),
                             b"image" => {
                                 if let Some(a) = get_attr_raw(b"href", &mut e.attributes()) {
@@ -513,9 +512,8 @@ impl BookFormat for FB2BookFormat {
                             res.push(Event::End(BytesEnd::borrowed(b"div")));
                             mode = XMode::Start;
                         }
-                        b"a" | b"p" | b"strong" | b"sup" | b"sub" => {
-                            res.push(event.unwrap().into_owned())
-                        }
+                        b"a" | b"p" | b"strong" | b"sup" | b"sub" | b"table" | b"tr" | b"th"
+                        | b"td" => res.push(event.unwrap().into_owned()),
                         b"emphasis" => res.push(Event::End(BytesEnd::borrowed(b"em"))),
                         b"empty-line" | b"image" => (),
                         _ => res.push(Event::End(BytesEnd::borrowed(b"div"))),

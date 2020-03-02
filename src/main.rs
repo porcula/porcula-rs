@@ -425,7 +425,7 @@ fn handler_search(req: &Request, fts: &BookReader, debug: bool) -> Response {
                 .unwrap_or(0);
             let order: String = req.get_param("order").unwrap_or(String::from("default"));
             match fts.search(&query, &order, limit, offset, debug) {
-                Ok(json) =>  Response::from_data("application/json", json),
+                Ok(json) => Response::from_data("application/json", json),
                 Err(e) => Response::text(e.to_string()).with_status_code(500),
             }
         }
@@ -435,11 +435,10 @@ fn handler_search(req: &Request, fts: &BookReader, debug: bool) -> Response {
 
 fn handler_facet(req: &Request, fts: &BookReader) -> Response {
     match req.get_param("path") {
-        Some(path) => 
-            match fts.get_facet(&path) {
-                Ok(ref data) => Response::json(data),
-                Err(e) => Response::text(e.to_string()).with_status_code(500),
-            },
+        Some(path) => match fts.get_facet(&path) {
+            Ok(ref data) => Response::json(data),
+            Err(e) => Response::text(e.to_string()).with_status_code(500),
+        },
         None => Response::empty_404(),
     }
 }
