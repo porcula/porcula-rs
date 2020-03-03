@@ -59,112 +59,197 @@ struct Settings {
 
 type BookFormats = HashMap<&'static str, Box<dyn BookFormat + Send + Sync>>;
 
+//language for user messages
+lazy_static! {
+    static ref MESSAGE_LANG: String = {
+        std::env::var("LC_MESSAGES")
+            .unwrap_or_else(|_| std::env::var("LANG").unwrap_or(DEFAULT_LANGUAGE.to_string()))
+            .chars()
+            .take(2)
+            .collect::<String>()
+            .to_lowercase()
+    };
+}
+
+//dumb message translation: first &str is English, second is localized [Russian]
+//all resources compiled in
+macro_rules! tr {
+    ( $def:expr, $loc:expr ) => {
+        if *MESSAGE_LANG == "ru" {
+            $loc
+        } else {
+            $def
+        }
+    };
+}
+
 fn main() {
-    std::env::set_var("RUST_BACKTRACE", "1");
+    std::env::set_var("RUST_BACKTRACE", "1"); //force backtrace in every environment
+
     let mut book_formats: BookFormats = HashMap::new();
     let fb2 = fb2_parser::FB2BookFormat {};
     book_formats.insert(fb2.file_extension(), Box::new(fb2));
 
     let matches = clap::App::new("Porcula")
         .version("0.1")
-        .about("Full-text search on collection of e-books")
-        .arg(Arg::with_name("index-dir")
-            .short("i")
-            .long("index-dir")
-            .takes_value(true)
-            .value_name("DIR")
-            .default_value(DEFAULT_INDEX_DIR)
-            .help("Index directory, read/write"))
-        .arg(Arg::with_name("books-dir")
-            .short("b")
-            .long("books-dir")
-            .takes_value(true)
-            .value_name("DIR")
-            .default_value(DEFAULT_BOOKS_DIR)
-            .help("Books directory, read only"))
-        .arg(Arg::with_name("debug")
-            .short("d")
-            .long("debug")
-            .help("Print debug information"))
-        .subcommand(SubCommand::with_name("index")
-            .about("Index/reindex books")
-            .arg(Arg::with_name("language")
-                .short("l")
-                .long("lang")
+        .about(tr![
+            "Full-text search on collection of e-books",
+            "Полнотекстовый поиск по коллекции электронных книг"
+        ])
+        .arg(
+            Arg::with_name("index-dir")
+                .short("i")
+                .long("index-dir")
                 .takes_value(true)
-                .multiple(true)
-                .use_delimiter(true)
-                .value_name("2 letter code | ANY")
-                .default_value(DEFAULT_LANGUAGE)
-                .help(&format!("Language of books, one or more")))
-            .arg(Arg::with_name("stemmer")
-                .long("stemmer")
-                .takes_value(true)
-                .value_name("language code | OFF")
-                .default_value(DEFAULT_LANGUAGE)
-                .help(&format!("Word stemmer for primary language")))
-            .arg(Arg::with_name("INDEX-MODE")
-                .required(true)
-                .index(1)
-                .possible_values(&["full", "delta"])
-                .default_value("delta")
-                .help("Choose reindex mode: full or incremental"))
-            .arg(Arg::with_name("threads")
-                .short("t")
-                .long("threads")
-                .takes_value(true)
-                .value_name("number")
-                .default_value("all CPUs")
-                .help("Number of workers"))
-            .arg(Arg::with_name("heap-memory")
-                .default_value(DEFAULT_HEAP_SIZE)
-                .short("m")
-                .long("heap-memory")
-                .takes_value(true)
-                .value_name("MB")
-                .help("Heap memory size"))
-            .arg(Arg::with_name("batch-size")
+                .value_name("DIR")
+                .default_value(DEFAULT_INDEX_DIR)
+                .help(tr![
+                    "Index directory, read/write",
+                    "Каталог для индекса, чтение и запись"
+                ]),
+        )
+        .arg(
+            Arg::with_name("books-dir")
                 .short("b")
-                .long("batch-size")
+                .long("books-dir")
                 .takes_value(true)
-                .value_name("number")
-                .default_value(DEFAULT_BATCH_SIZE)
-                .help("Commit after each N-th books"))
-            .arg(Arg::with_name("no-body")
-                .long("no-body")
-                .help("Disable indexing of book's body"))
-            )
-        .subcommand(SubCommand::with_name("query")
-            .about("Run single query, print result as JSON and exit")
-            .arg(Arg::with_name("QUERY-TEXT")
-                .required(true)
-                .index(1)
-                .help("Query text"))
-            .arg(Arg::with_name("hits")
-                .default_value(DEFAULT_QUERY_HITS)
-                .short("h")
-                .long("hits")
-                .takes_value(true)
-                .value_name("INT")
-                .help("Limit results to N top hits"))
-            )
-        .subcommand(SubCommand::with_name("facet")
-            .about("Run single facet query, print result as JSON and exit")
-            .arg(Arg::with_name("PATH")
-                .required(true)
-                .index(1)
-                .help("Facet path"))
-            )
-        .subcommand(SubCommand::with_name("server")
-            .about("Start web server [default mode]")
-            .arg(Arg::with_name("listen")
-                .default_value(DEFAULT_LISTEN_ADDR)
-                .short("L")
-                .long("listen")
-                .takes_value(true)
-                .value_name("IP:PORT")
-                .help("Listen address"))
-            )
+                .value_name("DIR")
+                .default_value(DEFAULT_BOOKS_DIR)
+                .help(tr![
+                    "Books directory, read only",
+                    "Каталог с книгами, только чтение"
+                ]),
+        )
+        .arg(Arg::with_name("debug").short("d").long("debug").help(tr![
+            "Print debug information",
+            "Вывод отладочной информации"
+        ]))
+        .subcommand(
+            SubCommand::with_name("index")
+                .about(tr!["Index/reindex books", "Индексация книг"])
+                .arg(
+                    Arg::with_name("language")
+                        .short("l")
+                        .long("lang")
+                        .takes_value(true)
+                        .multiple(true)
+                        .use_delimiter(true)
+                        .value_name(tr!["2 letter code | ANY", "2-буквенный код | ANY"])
+                        .default_value(DEFAULT_LANGUAGE)
+                        .help(tr![
+                            "Language of books, one or more",
+                            "Язык книг, можно несколько"
+                        ]),
+                )
+                .arg(
+                    Arg::with_name("stemmer")
+                        .long("stemmer")
+                        .takes_value(true)
+                        .value_name(tr!["language code | OFF", "код языка | OFF"])
+                        .default_value(DEFAULT_LANGUAGE)
+                        .help(tr!["Word stemmer", "Алгоритм определения основы слова"]),
+                )
+                .arg(
+                    Arg::with_name("INDEX-MODE")
+                        .required(true)
+                        .index(1)
+                        .possible_values(&["full", "delta"])
+                        .default_value("delta")
+                        .help(tr![
+                            "Index mode: full or incremental",
+                            "Режим индексирования: полный или добавление"
+                        ]),
+                )
+                .arg(
+                    Arg::with_name("threads")
+                        .short("t")
+                        .long("threads")
+                        .takes_value(true)
+                        .value_name("number")
+                        .default_value(tr!["all CPUs", "все CPU"])
+                        .help(tr![
+                            "Number of indexing workers",
+                            "Число потоков индексирования"
+                        ]),
+                )
+                .arg(
+                    Arg::with_name("heap-memory")
+                        .default_value(DEFAULT_HEAP_SIZE)
+                        .short("m")
+                        .long("heap-memory")
+                        .takes_value(true)
+                        .value_name("MB")
+                        .help(tr!["Heap memory size", "Размер памяти"]),
+                )
+                .arg(
+                    Arg::with_name("batch-size")
+                        .short("b")
+                        .long("batch-size")
+                        .takes_value(true)
+                        .value_name("INT")
+                        .default_value(DEFAULT_BATCH_SIZE)
+                        .help(tr![
+                            "Commit after each N-th books",
+                            "Сохранение каждых N-книг"
+                        ]),
+                )
+                .arg(Arg::with_name("no-body").long("no-body").help(tr![
+                    "Disable indexing of book's body",
+                    "Отключить индексацию основного текста книги"
+                ])),
+        )
+        .subcommand(
+            SubCommand::with_name("query")
+                .about(tr![
+                    "Run single query, print result as JSON and exit",
+                    "Выполнить запрос, результат в формате JSON"
+                ])
+                .arg(
+                    Arg::with_name("QUERY-TEXT")
+                        .required(true)
+                        .index(1)
+                        .help(tr!["Query text", "Текст запроса"]),
+                )
+                .arg(
+                    Arg::with_name("hits")
+                        .default_value(DEFAULT_QUERY_HITS)
+                        .short("h")
+                        .long("hits")
+                        .takes_value(true)
+                        .value_name("INT")
+                        .help(tr![
+                            "Limit results to N top hits",
+                            "Ограничить число найденных книг"
+                        ]),
+                ),
+        )
+        .subcommand(
+            SubCommand::with_name("facet")
+                .about(tr![
+                    "Run single facet query, print result as JSON and exit",
+                    "Выполнить фасетный запрос, результат в формате JSON"
+                ])
+                .arg(Arg::with_name("PATH").required(true).index(1).help(tr![
+                    "Facet path, i.e. '/author/K' or '/genre/sf'",
+                    "Путь по категориям, например '/author/K' или '/genre/sf'"
+                ])),
+        )
+        .subcommand(
+            SubCommand::with_name("server")
+                .about(tr![
+                    "Start web server [default mode]",
+                    "Запустить веб-сервер [основной режим работы]"
+                ])
+                .arg(
+                    Arg::with_name("listen")
+                        .default_value(DEFAULT_LISTEN_ADDR)
+                        .short("L")
+                        .long("listen")
+                        .takes_value(true)
+                        .value_name("IP:PORT")
+                        .help(tr!["Listen address", "Адрес сервера"]),
+                ),
+        )
         .get_matches();
 
     let debug = matches.is_present("debug");
@@ -176,24 +261,38 @@ fn main() {
     //auto-create index directory when indexing
     if !index_path.exists() && matches.subcommand_matches("index").is_some() {
         eprintln!(
-            "Not exists index directory: {}, creating",
+            "{}: {}",
+            tr![
+                "Creating non-existent index directory",
+                "Создаём отсутствующий каталог"
+            ],
             index_path.display()
         );
         match std::fs::create_dir(&index_path) {
             Ok(()) => eprintln!(
-                "Directory created: {}",
+                "{}: {}",
+                tr!["Directory created", "Создан каталог"],
                 index_path.canonicalize().unwrap().display()
             ),
             Err(e) => {
-                eprintln!("Error creating directory: {}", e);
+                eprintln!(
+                    "{}: {}",
+                    tr!["Error creating directory", "Ошибка создания каталога"],
+                    e
+                );
                 std::process::exit(1);
             }
         }
     }
     let index_path = index_path.canonicalize().unwrap_or_else(|_| {
         eprintln!(
-            "Not found index directory: {}\nRun 'index' command or use --index-dir=... option",
-            index_path.display()
+            "{}: {}\n{}",
+            tr!["Not found index directory", "Не найден индексный каталог"],
+            index_path.display(),
+            tr![
+                "Run 'index' command or use --index-dir=... option",
+                "Запустите команду 'index' или укажите путь опцией --index-dir=..."
+            ],
         );
         std::process::exit(1);
     });
@@ -203,7 +302,11 @@ fn main() {
     let mut settings: Settings = match std::fs::File::open(&settings_filename) {
         Ok(f) => serde_json::from_reader(f).unwrap_or_else(|e| {
             eprintln!(
-                "Invalid settings file: {}: {}",
+                "{}: {}: {}",
+                tr![
+                    "Invalid settings file for index",
+                    "Неправильный файл с настройками индекса"
+                ],
                 settings_filename.display(),
                 e
             );
@@ -227,8 +330,13 @@ fn main() {
     if books_dir_required {
         books_path = books_path.canonicalize().unwrap_or_else(|_| {
             eprintln!(
-                "Not found books directory: {}\nUse --books-dir=... option",
-                settings.books_dir
+                "{}: {}\n{}",
+                tr!["Not found books directory", "Не найден каталог с книгами"],
+                settings.books_dir,
+                tr![
+                    "Use --books-dir=... option",
+                    "Укажите путь опцией --books-dir=..."
+                ],
             );
             std::process::exit(1);
         });
@@ -251,7 +359,11 @@ fn main() {
         }
     }
     .unwrap_or_else(|_| {
-        eprintln!("Invalid file: {}", genre_map_filename);
+        eprintln!(
+            "{}: {}",
+            tr!["Invalid file format", "Неправильный формат файла"],
+            genre_map_filename
+        );
         std::process::exit(1);
     });
 
@@ -264,7 +376,11 @@ fn main() {
         }
         assert!(
             settings.langs.len() > 0,
-            "No language specified nor on command line [--lang=..], nor in settings file {}",
+            "{} {}",
+            tr![
+                "No language specified nor on command line [--lang=..], nor in settings file",
+                "Не указан язык ни в командной строке [--lang=..], ни в файле настроек"
+            ],
             settings_filename.display()
         );
         if matches.occurrences_of("stemmer") > 0 {
@@ -283,13 +399,17 @@ fn main() {
             .value_of("threads")
             .map(|x| x.parse::<usize>().unwrap_or(0));
         let heap_mb_str = matches.value_of("memory").unwrap_or(DEFAULT_HEAP_SIZE);
-        let heap_size: usize = heap_mb_str
-            .parse()
-            .expect(&format!("Invalid memory size {}", heap_mb_str));
+        let heap_size: usize = heap_mb_str.parse().expect(&format!(
+            "{} {}",
+            tr!["Invalid memory size", "Некорректный размер"],
+            heap_mb_str
+        ));
         let batch_size_str = matches.value_of("batch-size").unwrap_or(DEFAULT_BATCH_SIZE);
-        let batch_size: usize = batch_size_str
-            .parse()
-            .expect(&format!("Invalid batch size {}", heap_mb_str));
+        let batch_size: usize = batch_size_str.parse().expect(&format!(
+            "{} {}",
+            tr!["Invalid batch size", "Некорректное число"],
+            heap_mb_str
+        ));
         //open index
         let mut book_writer = BookWriter::new(
             index_path,
@@ -302,7 +422,12 @@ fn main() {
         let mut f = std::fs::File::create(&settings_filename).unwrap();
         let json = serde_json::to_string(&settings).unwrap();
         if let Err(e) = f.write(json.as_bytes()) {
-            eprintln!("Error saving file {}: {}", settings_filename.display(), e);
+            eprintln!(
+                "{} {}: {}",
+                tr!["Error saving file", "Ошибка сохранения файла"],
+                settings_filename.display(),
+                e
+            );
             std::process::exit(2);
         }
         reindex(
@@ -319,16 +444,22 @@ fn main() {
 
     assert!(
         settings.langs.len() > 0,
-        "Empty language list in {}",
+        "{} {}",
+        tr!["Empty language list in", "Пустой список языков в"],
         settings_filename.display()
     );
 
     //open index
     let fts = BookReader::new(&index_path, &settings.langs[0]).unwrap_or_else(|e| {
         eprintln!(
-            "Error opening index in '{}': {}\nTry to rebuild with 'index full' command",
+            "{} '{}': {}\n{}",
+            tr!["Error opening index in", "Ошибка открытия индекса в"],
             index_path.display(),
-            e
+            e,
+            tr![
+                "Try to rebuild with 'index full' command",
+                "Попробуйте пересоздать индекс командой 'index full'"
+            ],
         );
         std::process::exit(4);
     });
@@ -337,16 +468,18 @@ fn main() {
     if let Some(matches) = matches.subcommand_matches("query") {
         if let Some(query) = matches.value_of("QUERY-TEXT") {
             let hits_str = matches.value_of("hits").unwrap_or(DEFAULT_QUERY_HITS);
-            let hits: usize = hits_str
-                .parse()
-                .expect(&format!("Invalid number of hits {}", hits_str));
+            let hits: usize = hits_str.parse().expect(&format!(
+                "{} {}",
+                tr!["Invalid number of hits", "Некорректное число"],
+                hits_str
+            ));
             match fts.search(&query, "default", hits, 0, debug) {
                 Ok(res) => {
                     println!("{}", res);
                     std::process::exit(0);
                 }
                 Err(e) => {
-                    eprintln!("Query error: {}", e);
+                    eprintln!("{}: {}", tr!["Query error", "Ошибка запроса"], e);
                     std::process::exit(2);
                 }
             }
@@ -361,7 +494,7 @@ fn main() {
                     std::process::exit(0);
                 }
                 Err(e) => {
-                    eprintln!("Query error: {}", e);
+                    eprintln!("{}: {}", tr!["Query error", "Ошибка запроса"], e);
                     std::process::exit(2);
                 }
             }
@@ -371,10 +504,10 @@ fn main() {
 
     //////////////////////SERVER MODE [default]
     let listen_addr = matches.value_of("listen").unwrap_or(DEFAULT_LISTEN_ADDR);
-    println!("index dir: {}", index_path.display());
-    println!("books dir: {}", books_path.display());
-    println!("language: {:?}", &settings.langs);
-    println!("application: http://{}/home.html", &listen_addr);
+    println!("{}: {}", tr!["Index dir", "Индекс"], index_path.display());
+    println!("{}: {}", tr!["Books dir", "Книги "], books_path.display());
+    println!("{}: {:?}", tr!["Language", "Язык"], &settings.langs);
+    println!("{}: http://{}/home.html", tr!["Application", "Приложение"], &listen_addr);
 
     rouille::start_server(&listen_addr, move |req| {
         if debug {
@@ -694,8 +827,11 @@ fn reindex(
                                     Ok(resized) => b.cover_image = Some(resized),
                                     Err(e) => {
                                         eprintln!(
-                                            "{}/{} -> image resize error {}",
-                                            zipfile, filename, e
+                                            "{}/{} -> {} {}",
+                                            zipfile,
+                                            filename,
+                                            tr!["image resize error", "ошибка изображения"],
+                                            e
                                         );
                                         warning_count += 1;
                                         b.cover_image = None;
@@ -707,9 +843,13 @@ fn reindex(
                             let at = Instant::now();
                             match book_writer.add_book(b, &genre_map.category) {
                                 Ok(_) => book_indexed += 1,
-                                Err(e) => {
-                                    eprintln!("{}/{} -> indexing error {}", zipfile, filename, e)
-                                } //and continue
+                                Err(e) => eprintln!(
+                                    "{}/{} -> {} {}",
+                                    zipfile,
+                                    filename,
+                                    tr!["indexing error", "ошибка индексации"],
+                                    e
+                                ), //and continue
                             }
                             time_to_doc += at.elapsed().as_millis();
                             book_in_batch += 1;
@@ -727,14 +867,21 @@ fn reindex(
                         } else {
                             book_ignored += 1;
                             println!(
-                                "         -> ignore lang {}",
+                                "         -> {} {}",
+                                tr!["ignore lang", "игнорируем язык"],
                                 b.lang.iter().next().unwrap_or(&String::new())
                             );
                         }
                     }
                     Err(e) => {
                         error_count += 1;
-                        eprintln!("{}/{} -> parse error {}", zipfile, filename, e);
+                        eprintln!(
+                            "{}/{} -> {} {}",
+                            zipfile,
+                            filename,
+                            tr!["parse error", "ошибка разбора"],
+                            e
+                        );
                         //and continue
                     }
                 }
@@ -754,10 +901,29 @@ fn reindex(
         }
         zip_index += 1;
     }
-    println!("Indexing: done\nArchives: {}/{}\nBooks: {}/{}, {} ignored, {} skipped\nErrors: {}\nWarnings: {}", 
-        zip_index, zip_count,
-        book_indexed, book_count, book_ignored, book_skipped,
-        error_count, warning_count,
+    println!("{}", tr!["Indexing: done", "Индексация завершена"]);
+    println!(
+        "{}: {}/{}",
+        tr!["Archives", "Архивов"],
+        zip_index,
+        zip_count
+    );
+    println!(
+        "{}: {}/{}, {} {}, {} {}",
+        tr!["Books", "Книг"],
+        book_indexed,
+        book_count,
+        book_ignored,
+        tr!["ignored", "проигнорировано"],
+        book_skipped,
+        tr!["skipped", "пропущено"]
+    );
+    println!(
+        "{}: {}, {}: {}",
+        tr!["Errors", "Ошибок"],
+        error_count,
+        tr!["Warnings", "Предупреждений"],
+        warning_count,
     );
     if debug {
         let total = tt.elapsed().as_millis();

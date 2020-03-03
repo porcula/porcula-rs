@@ -473,7 +473,7 @@ impl BookFormat for FB2BookFormat {
                                 //remove namespace from href="ns:xxx"
                                 if let Some(a) = get_attr_raw(b"href", &mut e.attributes()) {
                                     let mut href = a.value.to_vec();
-                                    if e.name()==b"image" && href.len() > 0 && href[0] == b'#' {
+                                    if e.name() == b"image" && href.len() > 0 && href[0] == b'#' {
                                         href.remove(0); // "#link" -> "link"
                                     }
                                     let attrs = vec![Attribute {
