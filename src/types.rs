@@ -57,7 +57,9 @@ pub trait BookFormat: Send + Sync {
         zipfile: &str,
         filename: &str,
         reader: &mut dyn BufRead,
-        no_body: bool,
+        with_body: bool,
+        with_annotation: bool,
+        with_cover: bool,
     ) -> ParserResult;
 
     fn str_to_html(&self, decoded_xml: &str) -> RenderResult;

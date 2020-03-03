@@ -54,7 +54,7 @@ struct Settings {
     langs: Vec<String>,
     stemmer: String,
     books_dir: String,
-    no_body: bool,
+    disabled: HashSet<String>,
 }
 
 type BookFormats = HashMap<&'static str, Box<dyn BookFormat + Send + Sync>>;
@@ -193,10 +193,60 @@ fn main() {
                             "Сохранение каждых N-книг"
                         ]),
                 )
-                .arg(Arg::with_name("no-body").long("no-body").help(tr![
-                    "Disable indexing of book's body",
-                    "Отключить индексацию основного текста книги"
-                ])),
+                .arg(
+                    Arg::with_name("with-body")
+                        .long("with-body")
+                        .help(tr![
+                            "Enable indexing of book's body",
+                            "Индексировать основной текст книги"
+                        ])
+                        .conflicts_with("without-body"),
+                )
+                .arg(
+                    Arg::with_name("without-body")
+                        .long("without-body")
+                        .help(tr![
+                            "Disable indexing of book's body",
+                            "Не индексировать основной текст книги"
+                        ])
+                        .conflicts_with("with-body"),
+                )
+                .arg(
+                    Arg::with_name("with-annotation")
+                        .long("with-annotation")
+                        .help(tr![
+                            "Enable indexing of book's annotation",
+                            "Индексировать аннотацию"
+                        ])
+                        .conflicts_with("without-annotation"),
+                )
+                .arg(
+                    Arg::with_name("without-annotation")
+                        .long("without-annotation")
+                        .help(tr![
+                            "Disable indexing of book's annotation",
+                            "Не индексировать аннотацию"
+                        ])
+                        .conflicts_with("with-annotation"),
+                )
+                .arg(
+                    Arg::with_name("with-cover")
+                        .long("with-cover")
+                        .help(tr![
+                            "Enable extraction of book's cover image",
+                            "Извлекать обложку книги"
+                        ])
+                        .conflicts_with("without-cover"),
+                )
+                .arg(
+                    Arg::with_name("without-cover")
+                        .long("without-cover")
+                        .help(tr![
+                            "Disable extraction of book's cover image",
+                            "Не извлекать обложку книги"
+                        ])
+                        .conflicts_with("with-cover"),
+                ),
         )
         .subcommand(
             SubCommand::with_name("query")
@@ -316,7 +366,7 @@ fn main() {
             langs: vec![DEFAULT_LANGUAGE.to_string()],
             stemmer: DEFAULT_LANGUAGE.to_string(),
             books_dir: DEFAULT_BOOKS_DIR.to_string(),
-            no_body: false,
+            disabled: HashSet::<String>::new(),
         },
     };
 
@@ -392,8 +442,14 @@ fn main() {
             Some("full") => false,
             _ => true,
         };
-        if matches.is_present("no-body") {
-            settings.no_body = true;
+        for i in vec!["body", "annotation", "cover"] {
+            let s = i.to_string();
+            if matches.is_present(format!("with-{}", i)) {
+                settings.disabled.remove(&s); //enabling field
+            }
+            if matches.is_present(format!("without-{}", i)) {
+                settings.disabled.insert(s); //disabling field
+            }
         }
         let num_threads = matches
             .value_of("threads")
@@ -507,7 +563,11 @@ fn main() {
     println!("{}: {}", tr!["Index dir", "Индекс"], index_path.display());
     println!("{}: {}", tr!["Books dir", "Книги "], books_path.display());
     println!("{}: {:?}", tr!["Language", "Язык"], &settings.langs);
-    println!("{}: http://{}/home.html", tr!["Application", "Приложение"], &listen_addr);
+    println!(
+        "{}: http://{}/home.html",
+        tr!["Application", "Приложение"],
+        &listen_addr
+    );
 
     rouille::start_server(&listen_addr, move |req| {
         if debug {
@@ -729,13 +789,16 @@ fn reindex(
             any_lang = true
         }
     }
+    let with_body = !settings.disabled.contains(&"body".to_string());
+    let with_annotation = !settings.disabled.contains(&"annotation".to_string());
+    let with_cover = !settings.disabled.contains(&"cover".to_string());
     println!(
-        "-----START INDEXING dir={} delta={} lang={:?} stemmer={} no_body={} files={:?}",
+        "-----START INDEXING dir={} delta={} lang={:?} stemmer={} body={} annotation={} cover={} files={:?}",
         &settings.books_dir,
         delta,
         &lang_set,
         &settings.stemmer,
-        settings.no_body,
+        with_body, with_annotation, with_cover,
         book_formats.keys()
     );
     let mut zip_files: Vec<DirEntry> = std::fs::read_dir(&settings.books_dir)
@@ -807,8 +870,14 @@ fn reindex(
                 );
                 let mut buf_file = BufReader::new(file);
                 let pt = Instant::now();
-                let parsed_book =
-                    book_format.parse(&zipfile, &filename, &mut buf_file, settings.no_body);
+                let parsed_book = book_format.parse(
+                    &zipfile,
+                    &filename,
+                    &mut buf_file,
+                    with_body,
+                    with_annotation,
+                    with_cover,
+                );
                 time_to_parse += pt.elapsed().as_millis();
                 match parsed_book {
                     Ok(mut b) => {

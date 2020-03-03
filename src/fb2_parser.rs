@@ -64,7 +64,9 @@ impl BookFormat for FB2BookFormat {
         zipfile: &str,
         filename: &str,
         reader: &mut dyn BufRead,
-        no_body: bool,
+        with_body: bool,
+        with_annotation: bool,
+        with_cover: bool,
     ) -> Result<Book, ParserError> {
         let mut xml = quick_xml::Reader::from_reader(reader);
         xml.trim_text(true);
@@ -105,38 +107,64 @@ impl BookFormat for FB2BookFormat {
                 XMode::Start => match event {
                     Ok(Event::Start(ref e)) => {
                         match e.name() {
-                            b"body" => mode = if no_body { XMode::Start } else { XMode::Body },
+                            b"body" => {
+                                if with_body {
+                                    mode = XMode::Body;
+                                } else {
+                                    xml.read_to_end(b"body", &mut buf).unwrap_or_else(|e| {
+                                        warning.push(format!(
+                                            "Error at position {}: {:?}",
+                                            &xml.buffer_position(),
+                                            e
+                                        ))
+                                    });
+                                }
+                            }
                             b"title-info" => mode = XMode::TitleInfo,
                             b"src-title-info" => mode = XMode::SrcTitleInfo,
                             b"document-info" => mode = XMode::DocInfo,
-                            b"binary" => match get_attr_raw(b"id", &mut e.attributes()) {
-                                Some(a) => {
-                                    let id = a.value.to_vec();
-                                    if *coverpage_href.as_bytes() == *id {
-                                        cover_prob = 3; //exact match with coverpage/image/href
-                                    }
-                                    if cover_prob < 3 {
-                                        //search word 'cover' in id
-                                        if let Ok(s) = str::from_utf8(&*id) {
-                                            if s.to_lowercase().contains("cover") {
-                                                cover_prob = 2;
+                            b"binary" => {
+                                if with_cover {
+                                    match get_attr_raw(b"id", &mut e.attributes()) {
+                                        Some(a) => {
+                                            let id = a.value.to_vec();
+                                            if *coverpage_href.as_bytes() == *id {
+                                                cover_prob = 3; //exact match with coverpage/image/href
                                             }
+                                            if cover_prob < 3 {
+                                                //search word 'cover' in id
+                                                if let Ok(s) = str::from_utf8(&*id) {
+                                                    if s.to_lowercase().contains("cover") {
+                                                        cover_prob = 2;
+                                                    }
+                                                }
+                                            }
+                                            if cover_prob < 1
+                                            //just first occurence of binary tag
+                                            {
+                                                cover_prob = 1;
+                                            }
+                                            let ct = match get_attr_raw(
+                                                b"content-type",
+                                                &mut e.attributes(),
+                                            ) {
+                                                Some(a) => a.value.to_vec(),
+                                                None => b"image/jpeg".to_vec(),
+                                            };
+                                            mode = XMode::Binary(Cow::Owned(id), Cow::Owned(ct));
                                         }
+                                        _ => (),
                                     }
-                                    if cover_prob < 1
-                                    //just first occurence of binary tag
-                                    {
-                                        cover_prob = 1;
-                                    }
-                                    let ct =
-                                        match get_attr_raw(b"content-type", &mut e.attributes()) {
-                                            Some(a) => a.value.to_vec(),
-                                            None => b"image/jpeg".to_vec(),
-                                        };
-                                    mode = XMode::Binary(Cow::Owned(id), Cow::Owned(ct));
+                                } else {
+                                    xml.read_to_end(b"binary", &mut buf).unwrap_or_else(|e| {
+                                        warning.push(format!(
+                                            "Error at position {}: {:?}",
+                                            &xml.buffer_position(),
+                                            e
+                                        ))
+                                    });
                                 }
-                                _ => (),
-                            },
+                            }
                             _ => tag = e.name().to_vec(),
                         }
                     }
@@ -154,7 +182,20 @@ impl BookFormat for FB2BookFormat {
                     Ok(Event::Start(ref e)) => match e.name() {
                         b"author" => mode = XMode::Author(ParentNode::TitleInfo),
                         b"translator" => mode = XMode::Translator,
-                        b"annotation" => mode = XMode::Annotation,
+                        b"annotation" => {
+                            if with_annotation {
+                                mode = XMode::Annotation;
+                            } else {
+                                xml.read_to_end(b"annotation", &mut buf)
+                                    .unwrap_or_else(|e| {
+                                        warning.push(format!(
+                                            "Error at position {}: {:?}",
+                                            &xml.buffer_position(),
+                                            e
+                                        ))
+                                    });
+                            }
+                        }
                         _ => tag = e.name().to_vec(),
                     },
                     Ok(Event::Empty(ref e)) => match e.name() {
@@ -317,19 +358,21 @@ impl BookFormat for FB2BookFormat {
         }
 
         let mut cover_image = None;
-        if let Some(bt) = cover_b64 {
-            match try_decode_base64(bt.escaped()) {
-                Ok((raw, warn)) => {
-                    cover_image = Some(raw);
-                    if !warning.is_empty() {
-                        warning.push(warn)
+        if with_cover {
+            if let Some(bt) = cover_b64 {
+                match try_decode_base64(bt.escaped()) {
+                    Ok((raw, warn)) => {
+                        cover_image = Some(raw);
+                        if !warning.is_empty() {
+                            warning.push(warn)
+                        }
                     }
+                    Err(e) => warning.push(e.to_string()),
                 }
-                Err(e) => warning.push(e.to_string()),
             }
         }
 
-        if !no_body && body.is_empty() {
+        if with_body && body.is_empty() {
             return Err(ParserError::EmptyBody);
         }
         if title.is_empty() {
@@ -365,12 +408,16 @@ impl BookFormat for FB2BookFormat {
             translator: translator,
             sequence: sequence,
             seqnum: seqnum,
-            annotation: if annotation.is_empty() {
-                None
-            } else {
+            annotation: if with_annotation && !annotation.is_empty() {
                 Some(annotation.join(" "))
+            } else {
+                None
             },
-            body: if no_body { None } else { Some(body.join(" ")) },
+            body: if with_body {
+                Some(body.join(" "))
+            } else {
+                None
+            },
             cover_image: cover_image,
             warning: warning,
         })
