@@ -188,11 +188,11 @@ fn main() {
                         .short("b")
                         .long("batch-size")
                         .takes_value(true)
-                        .value_name("INT")
+                        .value_name("MB")
                         .default_value(DEFAULT_BATCH_SIZE)
                         .help(tr![
-                            "Commit after each N-th books",
-                            "Сохранение каждых N-книг"
+                            "Commit after each N-th megabytes",
+                            "Сохранение каждых N мегабайт"
                         ]),
                 )
                 .arg(
@@ -506,7 +506,7 @@ fn main() {
             &book_formats,
             &genre_map,
             delta,
-            batch_size,
+            batch_size * 1024 * 1024,
             debug,
         );
         std::process::exit(0);
@@ -888,7 +888,7 @@ fn reindex(
         let mut zip = zip::ZipArchive::new(buffered).unwrap();
         let files_count = zip.len();
         time_to_open_zip += zt.elapsed().as_millis();
-        let mut book_in_batch = 0;
+        let mut book_indexed_size = 0;
         for file_index in 0..files_count {
             if canceled.load(Ordering::SeqCst) {
                 break;
@@ -958,6 +958,7 @@ fn reindex(
                                 time_to_image += it.elapsed().as_millis();
                             }
 
+                            let book_size = b.size_of();
                             let at = Instant::now();
                             match book_writer.add_book(b, &genre_map) {
                                 Ok(_) => book_indexed += 1,
@@ -970,8 +971,8 @@ fn reindex(
                                 ), //and continue
                             }
                             time_to_doc += at.elapsed().as_millis();
-                            book_in_batch += 1;
-                            if (book_in_batch % batch_size) == 0 {
+                            book_indexed_size += book_size;
+                            if book_indexed_size > batch_size {
                                 if debug {
                                     println!("Commit: start");
                                 }
@@ -981,6 +982,7 @@ fn reindex(
                                 if debug {
                                     println!("Commit: done");
                                 }
+                                book_indexed_size = 0;
                             }
                         } else {
                             book_ignored += 1;

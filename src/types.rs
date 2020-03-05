@@ -1,6 +1,7 @@
+use deepsize::DeepSizeOf;
 use std::io::BufRead;
 
-#[derive(Debug)]
+#[derive(Debug, DeepSizeOf)]
 pub struct Person {
     pub first_name: Option<String>,
     pub middle_name: Option<String>,
@@ -8,7 +9,7 @@ pub struct Person {
     pub nick_name: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, DeepSizeOf)]
 pub struct Book {
     pub id: Option<String>,
     pub zipfile: String,
@@ -96,6 +97,12 @@ impl Display for Book {
            self.cover_image.as_ref().map(|x| x.len()).unwrap_or(0),
            self.warning.join(", "),
         )
+    }
+}
+
+impl Book {
+    pub fn size_of(&self) -> usize {
+        self.deep_size_of()
     }
 }
 
