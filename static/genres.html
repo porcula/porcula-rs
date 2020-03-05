@@ -23,7 +23,6 @@
     <script src="common.js"></script>
     <script>
         var translation;
-        var category;
         $.when(
             $.getJSON("genre/translation", function (data) { translation = data; })
         ).then(function(){ 
@@ -43,7 +42,7 @@
                         k: code == 'misc' ? '' : t //sort key, 'misc' goes down
                     };
                 }
-                var ordered = sort_keys(facet);
+                var ordered = sort_by_prop(facet,'k');
                 var tab = "";
                 for (var i in ordered) {
                     var path = ordered[i];
@@ -95,7 +94,7 @@
                     var v = grouped[i].v;
                     if (v>max) max=v;
                 }
-                var ordered = sort_keys(grouped);
+                var ordered = sort_by_prop(grouped,'k');
                 var tab = "";
                 for (var i in ordered) {
                     var t = ordered[i];
@@ -123,17 +122,6 @@
             }).show();
         }
         $("#substr").change(filter_list).keyup(filter_list);
-
-        function sort_keys(obj) {
-            var keys = Object.keys(obj);
-            return keys.sort(function(a,b) {
-                var a = obj[a].k;
-                var b = obj[b].k;
-                if (a=="" || a==undefined) return +1; //to end
-                if (b=="") return -1; //to end
-                return a.localeCompare(b);
-            });
-        }
     </script>
 </body>
 </html>

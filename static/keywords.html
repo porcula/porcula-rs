@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>100 ключевых слов</title>
+    <link rel="stylesheet" href="site.css" />
+    <link rel="stylesheet" href="jqcloud.css" />
+</head>
+<body>
+    <div id="cloud"></div>
+    <script src="jquery-1.12.4.min.js"></script>
+    <!--https://github.com/lucaong/jQCloud-->
+    <script src="jqcloud-1.0.4.min.js"></script>
+    <script src="common.js"></script>
+    <script>
+        var translation;
+        $.when(
+            $.getJSON("genre/translation", function (data) { translation = data; })
+        ).then(function(){ 
+            $.getJSON("facet", {path:"/kw",hits:100}, function (facet) {
+                // {path: count-value}, path ::= '/kw/<word>'
+                var tags = [];
+                for (var path in facet) {
+                    var match = path.match(/([^\/]+)$/);
+                    if (!match) continue;
+                    var code = match[1];
+                    var v = +facet[path];
+                    var t = translation[code] || code;
+                    var url = 'home.html?query=facet:"'+ path + '"';
+                    tags.push({ text: t, weight: v,  link: url });
+                }
+                tags.sort(function(a,b) {
+                    return a.text.localeCompare(b.text);
+                });
+                $("#cloud").jQCloud(tags,{
+                    width: window.innerWidth,
+                    height: window.innerHeight,                
+                    shape: 'rectangular',
+                    encodeURI: true,
+                });
+            });
+        });
+    </script>
+</body>
+</html>

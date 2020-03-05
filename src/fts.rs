@@ -282,22 +282,27 @@ impl BookWriter {
                 doc.add_text(self.fields.date, &i)
             }
         }
-        let mut genre_found = false;
+        let mut genre_facet = vec![];
         let mut keyword = book.keyword.clone();
         for i in &book.genre {
             if i.len() > 0 {
-                let path = format!("/genre/{}", genre_map.path_for(i));
-                doc.add_facet(self.fields.facet, &path);
-                genre_found = true;
+                genre_facet.push(format!("/genre/{}", genre_map.path_for(i)));
                 //if genre looks like word -> add it to keywords
                 if !i.contains('_') {
                     keyword.push(i.to_lowercase());
                 }
             }
         }
-        if !genre_found {
-            doc.add_facet(self.fields.facet, "/genre/misc/unknown");
+        if genre_facet.is_empty() {
+            genre_facet.push("/genre/misc/unknown".to_string());
         }
+        genre_facet.sort();
+        genre_facet.dedup();
+        for i in genre_facet {
+            doc.add_facet(self.fields.facet, &i);
+        }
+        keyword.sort();
+        keyword.dedup();
         for i in keyword {
             if i.len() > 0 {
                 let path = format!("/kw/{}", i);
@@ -529,14 +534,20 @@ impl BookReader {
         Ok(None)
     }
 
-    pub fn get_facet(&self, path: &str) -> Result<HashMap<String, u64>> {
+    pub fn get_facet(&self, path: &str, hits: Option<usize>) -> Result<HashMap<String, u64>> {
         let searcher = self.reader.searcher();
         let mut facet_collector = FacetCollector::for_field(self.fields.facet);
         facet_collector.add_facet(path);
         let facet_counts = searcher.search(&AllQuery, &facet_collector)?;
         let mut facets = HashMap::<String, u64>::new();
-        for (facet, count) in facet_counts.get(path) {
-            facets.insert(facet.to_path_string(), count);
+        if let Some(k) = hits {
+            for (facet, count) in facet_counts.top_k(path, k) {
+                facets.insert(facet.to_path_string(), count);
+            }
+        } else {
+            for (facet, count) in facet_counts.get(path) {
+                facets.insert(facet.to_path_string(), count);
+            }
         }
         Ok(facets)
     }

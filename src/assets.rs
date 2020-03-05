@@ -11,6 +11,27 @@ lazy_static! {
     static ref ASSETS: HashMap::<&'static str, Asset> = {
         let mut m = HashMap::new();
         m.insert(
+            "jqcloud.css",
+            Asset {
+                content_type: "text/css; charset=utf8",
+                content: include_bytes!("../static/jqcloud.css"),
+            },
+        );
+        m.insert(
+            "render.css",
+            Asset {
+                content_type: "text/css; charset=utf8",
+                content: include_bytes!("../static/render.css"),
+            },
+        );
+        m.insert(
+            "site.css",
+            Asset {
+                content_type: "text/css; charset=utf8",
+                content: include_bytes!("../static/site.css"),
+            },
+        );
+        m.insert(
             "authors.html",
             Asset {
                 content_type: "text/html; charset=utf8",
@@ -32,6 +53,13 @@ lazy_static! {
             },
         );
         m.insert(
+            "keywords.html",
+            Asset {
+                content_type: "text/html; charset=utf8",
+                content: include_bytes!("../static/keywords.html"),
+            },
+        );
+        m.insert(
             "render.html",
             Asset {
                 content_type: "text/html; charset=utf8",
@@ -46,17 +74,17 @@ lazy_static! {
             },
         );
         m.insert(
-            "render.css",
+            "common.js",
             Asset {
-                content_type: "text/css; charset=utf8",
-                content: include_bytes!("../static/render.css"),
+                content_type: "application/javascript",
+                content: include_bytes!("../static/common.js"),
             },
         );
         m.insert(
-            "site.css",
+            "jqcloud-1.0.4.min.js",
             Asset {
-                content_type: "text/css; charset=utf8",
-                content: include_bytes!("../static/site.css"),
+                content_type: "application/javascript",
+                content: include_bytes!("../static/jqcloud-1.0.4.min.js"),
             },
         );
         m.insert(
@@ -64,13 +92,6 @@ lazy_static! {
             Asset {
                 content_type: "application/javascript",
                 content: include_bytes!("../static/jquery-1.12.4.min.js"),
-            },
-        );
-        m.insert(
-            "common.js",
-            Asset {
-                content_type: "application/javascript",
-                content: include_bytes!("../static/common.js"),
             },
         );
         m.insert(

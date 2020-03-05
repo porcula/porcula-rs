@@ -25,5 +25,16 @@ function size_pretty(s) {
     return s + "G";
 }
 
+function sort_by_prop(obj,prop) {
+    var keys = Object.keys(obj);
+    return keys.sort(function(a,b) {
+        var a = obj[a][prop];
+        var b = obj[b][prop];
+        if (a=="" || a==undefined) return +1; //to end
+        if (b=="") return -1; //to end
+        return a.localeCompare(b);
+    });
+}
+
 $(document).ajaxStart(function () { $("#loading").show(); });
 $(document).ajaxStop(function () { $("#loading").hide(); });

@@ -41,7 +41,7 @@ const DEFAULT_BOOKS_DIR: &'static str = "books";
 const DEFAULT_HEAP_SIZE: &'static str = "100";
 const DEFAULT_BATCH_SIZE: &'static str = "100";
 const DEFAULT_LISTEN_ADDR: &'static str = "127.0.0.1:8083";
-const DEFAULT_QUERY_HITS: &'static str = "10";
+const DEFAULT_QUERY_HITS: usize = 10;
 const DEFAULT_BASE_URL: &'static str = "/porcula";
 const DEFAULT_ASSETS_DIR: &'static str = "static";
 
@@ -89,6 +89,8 @@ fn main() {
     let mut book_formats: BookFormats = HashMap::new();
     let fb2 = fb2_parser::FB2BookFormat {};
     book_formats.insert(fb2.file_extension(), Box::new(fb2));
+
+    let default_query_hits_str = DEFAULT_QUERY_HITS.to_string();
 
     let matches = clap::App::new("Porcula")
         .version("0.1")
@@ -262,7 +264,7 @@ fn main() {
                 )
                 .arg(
                     Arg::with_name("hits")
-                        .default_value(DEFAULT_QUERY_HITS)
+                        .default_value(&default_query_hits_str)
                         .short("h")
                         .long("hits")
                         .takes_value(true)
@@ -282,7 +284,19 @@ fn main() {
                 .arg(Arg::with_name("PATH").required(true).index(1).help(tr![
                     "Facet path, i.e. '/author/K' or '/genre/sf'",
                     "Путь по категориям, например '/author/K' или '/genre/sf'"
-                ])),
+                ]))
+                .arg(
+                    Arg::with_name("hits")
+                        .default_value(&default_query_hits_str)
+                        .short("h")
+                        .long("hits")
+                        .takes_value(true)
+                        .value_name("INT")
+                        .help(tr![
+                            "Limit results to N top hits",
+                            "Ограничить число найденного"
+                        ]),
+                ),
         )
         .subcommand(
             SubCommand::with_name("server")
@@ -523,7 +537,7 @@ fn main() {
     //////////////////////QUERY MODE
     if let Some(matches) = matches.subcommand_matches("query") {
         if let Some(query) = matches.value_of("QUERY-TEXT") {
-            let hits_str = matches.value_of("hits").unwrap_or(DEFAULT_QUERY_HITS);
+            let hits_str = matches.value_of("hits").unwrap_or(&default_query_hits_str);
             let hits: usize = hits_str.parse().expect(&format!(
                 "{} {}",
                 tr!["Invalid number of hits", "Некорректное число"],
@@ -544,7 +558,13 @@ fn main() {
     }
     if let Some(matches) = matches.subcommand_matches("facet") {
         if let Some(path) = matches.value_of("PATH") {
-            match fts.get_facet(&path) {
+            let hits_str = matches.value_of("hits").unwrap_or(&default_query_hits_str);
+            let hits: usize = hits_str.parse().expect(&format!(
+                "{} {}",
+                tr!["Invalid number of hits", "Некорректное число"],
+                hits_str
+            ));
+            match fts.get_facet(&path, Some(hits)) {
                 Ok(res) => {
                     println!("{}", serde_json::to_string(&res).unwrap());
                     std::process::exit(0);
@@ -626,7 +646,7 @@ fn handler_search(req: &Request, fts: &BookReader, debug: bool) -> Response {
                 .get_param("limit")
                 .unwrap_or(String::new())
                 .parse()
-                .unwrap_or(20);
+                .unwrap_or(DEFAULT_QUERY_HITS);
             let offset: usize = req
                 .get_param("offset")
                 .unwrap_or(String::new())
@@ -643,8 +663,12 @@ fn handler_search(req: &Request, fts: &BookReader, debug: bool) -> Response {
 }
 
 fn handler_facet(req: &Request, fts: &BookReader) -> Response {
+    let hits: Option<usize> = match req.get_param("hits") {
+        Some(x) => Some(x.parse().unwrap_or(DEFAULT_QUERY_HITS)),
+        None => Some(DEFAULT_QUERY_HITS),
+    };
     match req.get_param("path") {
-        Some(path) => match fts.get_facet(&path) {
+        Some(path) => match fts.get_facet(&path, hits) {
             Ok(ref data) => Response::json(data),
             Err(e) => Response::text(e.to_string()).with_status_code(500),
         },
