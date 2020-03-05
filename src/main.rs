@@ -665,7 +665,7 @@ fn handler_search(req: &Request, fts: &BookReader, debug: bool) -> Response {
 fn handler_facet(req: &Request, fts: &BookReader) -> Response {
     let hits: Option<usize> = match req.get_param("hits") {
         Some(x) => Some(x.parse().unwrap_or(DEFAULT_QUERY_HITS)),
-        None => Some(DEFAULT_QUERY_HITS),
+        None => None,
     };
     match req.get_param("path") {
         Some(path) => match fts.get_facet(&path, hits) {
