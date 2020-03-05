@@ -959,6 +959,10 @@ fn reindex(
                             }
 
                             let book_size = b.size_of();
+                            if !with_body {
+                                b.length = book_size as u64;
+                            }
+
                             let at = Instant::now();
                             match book_writer.add_book(b, &genre_map) {
                                 Ok(_) => book_indexed += 1,
@@ -1037,7 +1041,7 @@ fn reindex(
         zip_total_size / 1024 / 1024,
     );
     println!(
-        "{}: {}/{} = {}MB, {} {}, {} {}",
+        "{}: {}/{} = {} MB, {} {}, {} {}",
         tr!["Books", "Книг"],
         book_indexed,
         book_count,
