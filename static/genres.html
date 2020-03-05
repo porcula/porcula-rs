@@ -71,32 +71,43 @@
             var row = td.parent();
             td.removeClass("expand");
             td.text("");
+            var grouped = {};
             $.getJSON("facet", {path:root}, function (facet) {
                 // {path: count-value}, path ::= '/genre/<category>/<genre>'
-                var max = 0;
+                var grouped = {}; //by translation
                 for (var path in facet) {
                     if (path==undefined) continue;
                     var v = +facet[path];
-                    if (v > max) max = v;
-                    if (v < 2) { //слишком редкий жанр - скорее всего ошибка
-                        delete facet[path];
-                        continue;
-                    }
                     var match = path.match(/([^\/]+)$/);
                     if (!match) continue;
                     var code = match[1];
                     var t = translation[code] || code;
-                    facet[path] = { v: v, t: t, k: t };
+                    if (grouped[t] == undefined) {
+                        grouped[t] = { k: t, path_arr: [path], v: v };
+                    }
+                    else {
+                        grouped[t].path_arr.push(path);
+                        grouped[t].v += v;
+                    }
                 }
-                var ordered = sort_keys(facet);
+                var max = 0;
+                for (var i in grouped) {
+                    var v = grouped[i].v;
+                    if (v>max) max=v;
+                }
+                var ordered = sort_keys(grouped);
                 var tab = "";
                 for (var i in ordered) {
-                    var path = ordered[i];
-                    var t = facet[path].t;
-                    var v = facet[path].v;
+                    var t = ordered[i];
+                    var v = grouped[t].v;
+                    if (v==1) continue;
+                    var path_arr = grouped[t].path_arr;
                     var pct = Math.trunc((1 * v) / max * 100 / 5) * 5;
                     if (pct > 100) pct = 100;
-                    var url = 'home.html?query='+ encodeURIComponent('facet:"' + path + '"');
+                    var url = 'home.html?query=';
+                    for (var j in path_arr) {
+                        url += encodeURIComponent('facet:"' + path_arr[j] + '" ');
+                    }
                     tab += '<tr class="row"><td></td><td class="L2"><a href="'+url+'" class="tdlink">' 
                         + esc(t) + '</a></td><td class="v gauge g' + pct + '">' + v + '</td></tr>';
                 }

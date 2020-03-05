@@ -83,6 +83,7 @@ impl BookFormat for FB2BookFormat {
         let mut translator = Vec::<Person>::new();
         let mut person = Person::new();
         let mut genre = Vec::<String>::new();
+        let mut keyword = Vec::<String>::new();
         let mut title = Vec::<String>::new();
         let mut sequence = Vec::<String>::new();
         let mut seqnum = Vec::<i64>::new();
@@ -245,6 +246,13 @@ impl BookFormat for FB2BookFormat {
                                 date.push(v);
                             }
                         }
+                        b"keywords" => {
+                            if let Ok(v) = e.unescape_and_decode(&xml) {
+                                for i in v.split(',') {
+                                    keyword.push(i.trim().to_lowercase());
+                                }
+                            }
+                        }
                         _ => (),
                     },
                     Ok(Event::End(ref e)) if e.name() == b"title-info" => mode = XMode::Start,
@@ -403,6 +411,7 @@ impl BookFormat for FB2BookFormat {
             lang: lang,
             date: date,
             genre: genre,
+            keyword: keyword,
             author: author,
             src_author: src_author,
             translator: translator,

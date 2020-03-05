@@ -602,7 +602,6 @@ fn main() {
             (GET) (/search) => { handler_search(&req, &fts, debug) },
             (GET) (/facet) => { handler_facet(&req, &fts) },
             (GET) (/genre/translation) => { Response::json(&genre_map.translation) },
-            (GET) (/genre/category) => { Response::json(&genre_map.category) },
             (GET) (/book/{zipfile: String}/{filename: String}/cover) => { handler_cover(&req, &fts, &zipfile, &filename) },
             (GET) (/book/{zipfile: String}/{filename: String}/render) => { handler_render(&req, &fts, &books_path, &zipfile, &filename, &book_formats) },
             (GET) (/book/{zipfile: String}/{filename: String}) => { handler_file(&req, &books_path, &zipfile, &filename, &book_formats) },
@@ -792,6 +791,17 @@ fn reindex(
     let with_body = !settings.disabled.contains(&"body".to_string());
     let with_annotation = !settings.disabled.contains(&"annotation".to_string());
     let with_cover = !settings.disabled.contains(&"cover".to_string());
+    //exit nicely if user press Ctrl+C
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+    let canceled: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
+    let c = canceled.clone();
+    ctrlc::set_handler(move || {
+        eprintln!("Cancel indexing...");
+        c.store(true, Ordering::SeqCst);
+    })
+    .expect("Error setting Ctrl-C handler");
+
     println!(
         "-----START INDEXING dir={} delta={} lang={:?} stemmer={} body={} annotation={} cover={} files={:?}",
         &settings.books_dir,
@@ -808,11 +818,17 @@ fn reindex(
         .collect();
     zip_files.sort_by_key(|e| e.file_name());
     let zip_count = zip_files.len();
+    let zip_total_size = zip_files.iter().fold(0, |acc, entry| {
+        acc + entry.metadata().map(|m| m.len()).unwrap_or(0)
+    });
+    let mut zip_progress_size = 0;
+    let mut zip_processed_size = 0;
     let mut zip_index = 0;
     let mut book_count = 0;
     let mut book_indexed = 0;
     let mut book_ignored = 0;
     let mut book_skipped = 0;
+    let mut book_parsed_size = 0;
     let mut error_count = 0;
     let mut warning_count = 0;
     let mut time_to_open_zip = 0;
@@ -826,25 +842,33 @@ fn reindex(
         book_writer.delete_all_books().unwrap();
     }
 
-    for e in zip_files {
+    for entry in zip_files {
+        if canceled.load(Ordering::SeqCst) {
+            break;
+        }
         let zt = Instant::now();
-        let os_filename = &e.file_name();
+        let os_filename = &entry.file_name();
+        let zip_size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+        let zip_progress_pct = zip_progress_size * 100 / zip_total_size;
         let zipfile = &os_filename.to_str().expect("invalid filename");
         if delta {
             if let Ok(true) = book_writer.is_book_indexed(&zipfile, "WHOLE") {
                 println!("[{}/{}] skip archive {}", zip_index, zip_count, &zipfile);
-                zip_index += 1;
+                zip_progress_size += zip_size;
                 continue;
             }
         }
         println!("[{}/{}] read archive {}", zip_index, zip_count, &zipfile);
-        let reader = std::fs::File::open(&e.path()).unwrap();
+        let reader = std::fs::File::open(&entry.path()).unwrap();
         let buffered = std::io::BufReader::new(reader);
         let mut zip = zip::ZipArchive::new(buffered).unwrap();
         let files_count = zip.len();
         time_to_open_zip += zt.elapsed().as_millis();
         let mut book_in_batch = 0;
         for file_index in 0..files_count {
+            if canceled.load(Ordering::SeqCst) {
+                break;
+            }
             let file = zip.by_index(file_index).unwrap();
             let filename: String = match decode_filename(file.name_raw()) {
                 Some(s) => s,
@@ -864,10 +888,11 @@ fn reindex(
                 println!(
                     "[{}%/{}%] {}/{}",
                     file_index * 100 / files_count,
-                    zip_index * 100 / zip_count,
+                    zip_progress_pct,
                     &zipfile,
                     &filename
                 );
+                book_parsed_size += file.size(); //uncompressed book size
                 let mut buf_file = BufReader::new(file);
                 let pt = Instant::now();
                 let parsed_book = book_format.parse(
@@ -910,7 +935,7 @@ fn reindex(
                             }
 
                             let at = Instant::now();
-                            match book_writer.add_book(b, &genre_map.category) {
+                            match book_writer.add_book(b, &genre_map) {
                                 Ok(_) => book_indexed += 1,
                                 Err(e) => eprintln!(
                                     "{}/{} -> {} {}",
@@ -969,19 +994,28 @@ fn reindex(
             println!("Commit: done");
         }
         zip_index += 1;
+        zip_progress_size += zip_size;
+        zip_processed_size += zip_size;
     }
-    println!("{}", tr!["Indexing: done", "Индексация завершена"]);
+    if canceled.load(Ordering::SeqCst) {
+        println!("{}", tr!["Indexing canceled", "Индексация прервана"]);
+    } else {
+        println!("{}", tr!["Indexing done", "Индексация завершена"]);
+    }
     println!(
-        "{}: {}/{}",
+        "{}: {}/{} = {}/{} MB",
         tr!["Archives", "Архивов"],
         zip_index,
-        zip_count
+        zip_count,
+        zip_processed_size / 1024 / 1024,
+        zip_total_size / 1024 / 1024,
     );
     println!(
-        "{}: {}/{}, {} {}, {} {}",
+        "{}: {}/{} = {}MB, {} {}, {} {}",
         tr!["Books", "Книг"],
         book_indexed,
         book_count,
+        book_parsed_size / 1024 / 1024,
         book_ignored,
         tr!["ignored", "проигнорировано"],
         book_skipped,

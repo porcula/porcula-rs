@@ -22,7 +22,7 @@ struct Fields {
     encoding: Field,
     length: Field,
     lang: Field,
-    genre: Field,
+    keyword: Field,
     date: Field,
     title: Field,
     author: Field,
@@ -69,7 +69,7 @@ impl Fields {
             encoding: schema_builder.add_text_field("encoding", STORED),
             length: schema_builder.add_u64_field("length", STORED),
             lang: schema_builder.add_text_field("lang", STORED | STRING),
-            genre: schema_builder.add_text_field("genre", STORED | STRING),
+            keyword: schema_builder.add_text_field("keyword", STORED | STRING),
             date: schema_builder.add_text_field("date", STORED | STRING),
             title: schema_builder.add_text_field("title", stored_text_opts.clone()),
             author: schema_builder.add_text_field("author", stored_text_opts.clone()),
@@ -103,9 +103,11 @@ impl Fields {
             lang: schema.get_field("lang").ok_or(TantivyError::SchemaError(
                 "field not found: lang".to_string(),
             ))?,
-            genre: schema.get_field("genre").ok_or(TantivyError::SchemaError(
-                "field not found: genre".to_string(),
-            ))?,
+            keyword: schema
+                .get_field("keyword")
+                .ok_or(TantivyError::SchemaError(
+                    "field not found: keyword".to_string(),
+                ))?,
             date: schema.get_field("date").ok_or(TantivyError::SchemaError(
                 "field not found: date".to_string(),
             ))?,
@@ -186,10 +188,6 @@ fn get_tokenizer<'a>(stemmer: &str) -> TextAnalyzer {
         .filter(Stemmer::new(language))
 }
 
-fn is_char_allowed_in_genre_code(c: char) -> bool {
-    c.is_alphanumeric() || c.is_whitespace() || c == '-' || c == '_'
-}
-
 impl BookWriter {
     pub fn new<P: AsRef<Path>>(
         index_dir: P,
@@ -260,13 +258,13 @@ impl BookWriter {
     pub fn add_book(
         &mut self,
         book: crate::types::Book,
-        genre_category: &HashMap<String, String>,
+        genre_map: &crate::genre_map::GenreMap,
     ) -> Result<()> {
         let mut doc = Document::default();
         doc.add_facet(self.fields.facet, file_facet(&book.zipfile, &book.filename)); //facet field is mandatory
         doc.add_text(self.fields.encoding, &book.encoding);
         doc.add_u64(self.fields.length, book.length);
-        if let Some(id) = book.id {
+        if let Some(id) = &book.id {
             doc.add_text(self.fields.id, &id);
         }
         for i in &book.lang {
@@ -285,26 +283,27 @@ impl BookWriter {
             }
         }
         let mut genre_found = false;
+        let mut keyword = book.keyword.clone();
         for i in &book.genre {
             if i.len() > 0 {
-                doc.add_text(self.fields.genre, &i);
-                //two-level genre categorization
-                let cat = match genre_category.get(i) {
-                    Some(x) => x,
-                    None => "misc",
-                };
-                let code = i
-                    .chars()
-                    .filter(|&x| is_char_allowed_in_genre_code(x))
-                    .collect::<String>()
-                    .to_lowercase();
-                let path = format!("/genre/{}/{}", cat, code);
+                let path = format!("/genre/{}", genre_map.path_for(i));
                 doc.add_facet(self.fields.facet, &path);
                 genre_found = true;
+                //if genre looks like word -> add it to keywords
+                if !i.contains('_') {
+                    keyword.push(i.to_lowercase());
+                }
             }
         }
         if !genre_found {
             doc.add_facet(self.fields.facet, "/genre/misc/unknown");
+        }
+        for i in keyword {
+            if i.len() > 0 {
+                let path = format!("/kw/{}", i);
+                doc.add_facet(self.fields.facet, &path);
+                doc.add_text(self.fields.keyword, &i);
+            }
         }
         for i in &book.author {
             let t = &i.to_string();
@@ -346,8 +345,8 @@ impl BookWriter {
         if let Some(text) = &book.body {
             doc.add_text(self.fields.body, &text);
         }
+        //consume book with image
         if let Some(raw) = book.cover_image {
-            //consume book with image
             doc.add_bytes(self.fields.cover_image, raw);
             doc.add_u64(self.fields.cover, 1);
         } else {
@@ -402,6 +401,7 @@ impl BookReader {
             "src_author",
             "translator",
             "annotation",
+            "keyword",
             "body",
         ]
         .iter()

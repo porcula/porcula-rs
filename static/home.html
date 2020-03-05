@@ -42,9 +42,11 @@
                 <li class="listitem"><p>оператор ИЛИ: </p><pre class="programlisting">hello OR world</pre></li>
                 <li class="listitem"><p>оператор НЕ:</p><pre class="programlisting">hello -title:world</pre></li>
                 <li class="listitem"><p>поиск по полям: </p><pre class="programlisting">title:hello AND body:world</pre></li>
-                <li class="listitem"><p>поиск фразы: </p><pre class="programlisting">"hello world"</pre></li>
+                <li class="listitem"><p>поиск фразы: </p><pre class="programlisting">"hello world" или title:"hello world"</pre></li>
                 <li class="listitem"><p>поиск в интервале: </p><pre class="programlisting">title:[a TO c]</pre></li>
                 <li class="listitem"><p>поиск в интервале (не включая): </p><pre class="programlisting">title:{a TO c}</pre></li>
+                <li class="listitem"><p>поиск по шаблону (медленный!): </p><pre class="programlisting">title:h?ll*</pre></li>
+                <li class="listitem"><p>поиск по регулярному выражению (медленный!): </p><pre class="programlisting">title:hell.*</pre></li>
             </ul>
         </div>
 
@@ -219,24 +221,22 @@
                 var valz = function (attr) { var x=v(attr); return x=="" || x=="0" ? "" : +x };
                 var zipfile = "";
                 var filename = "";
+                var genre = [];
                 var facet = r["facet"];
                 for (var f in facet) {
                     var m = facet[f].match(/\/file\/([^\/]+)\/([^\/]+)/);
                     if (m) {
                         zipfile = m[1];
                         filename = m[2];
-                        break;
+                    }
+                    var m = facet[f].match(/\/genre\/([^\/]+)\/([^\/]+)/);
+                    if (m) {
+                        var code = m[2];
+                        genre.push( genre_translation[code] || code);
                     }
                 }
                 if (filename=="WHOLE") continue;
-                var genre = r["genre"];
-                if (genre!=undefined) {
-                    for (var i in genre) {
-                        var g = genre[i];
-                        genre[i] = esc( genre_translation[g] || g );
-                    }
-                    genre = genre.sort().join(", ");
-                }
+                genre = genre.sort().join(", ");
                 var size_pct = Math.trunc(valz("length") / size100pct * 100 / 5) * 5;
                 if (size_pct > 100) size_pct = 100;
                 var tarr = r["title"];
@@ -277,7 +277,8 @@
                     + (ex("sequence") ? '<div class="n ms sequence">Серия</div><div class="v ms sequence">' + vale("sequence",", ") + " " + valz("seqnum") + '</div>' : '')
                     + (ex("date") ? '<div class="n date">Дата</div><div class="v date">' + vale("date"," / ") + '</div>' : '')
                     + '<div class="n2 lang">Язык</div><div class="v2 lang">' + vale("lang"," ← ") + '</div>'
-                    + '<div class="n genre">Жанр</div><div class="v genre">' + (genre||'-') + '</div>'
+                    + (genre ? '<div class="n genre">Жанр</div><div class="v genre">' + genre + '</div>' : '')
+                    + (ex("keyword") ? '<div class="n keyword">Ключевые слова</div><div class="v keyword">' + vale("keyword") + '</div>' : '')
                     + '<div class="n2 length">Длина</div><div class="v2 length">' + size_pretty(valz("length")) + '</div>'
                     + (ex("annotation") ? '<div class="n annotation">Аннотация</div><div class="v-span annotation">' + vale("annotation") + '</div>' : '')
                     + '</div></td></tr>'

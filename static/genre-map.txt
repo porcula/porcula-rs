@@ -1,20 +1,20 @@
 # Двухуровневая категоризация жанров с расшифровкой кодов
 # Формат:
 #     /код=название категории
-#     код=название жанра
+#     код+синоним+синоним...=название жанра
 #     ...
-# код должен быть в нижнем регистре и не содержать символов / и =
-# список жанров взят с https://coollib.net/g
+# код должен быть в нижнем регистре и не содержать символов / + =
+# за основу взят список жанров с https://coollib.net/g дополненный фактическими данными Флибусты
 # все отсутствующие в списке жанры попадут в категорию "Прочее"
 
 /military=Военное дело
 
 military_arts=Боевые искусства
 nonf_military=Военная документалистика
-military_history=Военная история
+military_history+histor_military=Военная история
 military_weapon=Военная техника и вооружение
 military=Военное дело
-prose_military=О войне
+prose_military+literature_war=О войне
 military_special=Спецслужбы
 
 /business=Деловая литература
@@ -35,19 +35,21 @@ economics_ref=Справочники
 trade=Торговля
 management=Управление, подбор персонала
 stock=Ценные бумаги, инвестиции
-economics=Экономика
+economics+biz_economics=Экономика
+foreign_business=Зарубежная бизнес-литература
+finance=Финансы
 
 /detective=Детективы и Триллеры
 
-det_action=Боевик
+det_action+action+экшн+боевик=Боевик
 det_cozy=Дамский детективный роман
 sf_detective=Детективная фантастика
-detective=Детективы
+detective=Детектив
 child_det=Детские остросюжетные
 det_irony=Иронический детектив
 det_history=Исторический детектив
 det_classic=Классический детектив
-det_crime=Криминальный детектив
+det_crime+criminal_detective=Криминальный детектив
 det_hard=Крутой детектив
 det_maniac=Маньяки
 thriller_medical=Медицинский триллер
@@ -59,64 +61,71 @@ thriller_techno=Техно триллер
 thriller=Триллер
 det_espionage=Шпионский детектив
 thriller_legal=Юридический триллер
+foreign_detective=Зарубежный детектив
+foreign_action=Зарубежный боевик
+thriller_police=Полицейский триллер
+thriller_mystery+mystical_thriller=Мистический триллер
 
 /documental=Документальная литература
 
-nonf_biography=Биографии и Мемуары
+nonf_biography+biogr_arts+biogr_leaders+biogr_professionals+biogr_historical+biogr_sports+biogr_travel+biography+биография+мемуары=Биографии и Мемуары
 travel_notes=География, путевые заметки
 nonfiction=Документальная литература
-sci_popular=Научпоп
-adv_animal=Природа и животные
-nonf_publicism=Публицистика
-adv_geo=Путешествия и география
+adv_animal+outdoors_nature_writing+outdoors_conservation+outdoors_fauna=Природа и животные
+nonf_publicism+foreign_publicism=Публицистика
+adv_geo+travel+travel_europe+travel_africa+travel_asia+travel_lat_am+travel_spec+travel_polar+outdoors_travel+travel_guidebook_series=Путешествия и география
 
 /home=Домоводство (Дом и семья)
 
 auto_regulations=Автомобили и ПДД
 home_pets=Домашние животные
-home=Домоводство
+home+foreign_home=Домоводство
 home_health=Здоровье
+health+health_self_help+health_women+health_men+family_health+health_sex+health_nutrition=Здоровье
 home_collecting=Коллекционирование
 home_cooking=Кулинария
 home_entertain=Развлечения
 home_garden=Сад и огород
 home_diy=Сделай сам
-family=Семейные отношения
+family+health_rel=Семейные отношения
 home_sport=Спорт
 home_crafts=Хобби и ремесла
 home_sex=Эротика, Секс
+outdoors_hunt_fish=Охота и рыболовство
+children+family_parenting+upbringing_book=Воспитание и уход за детьми
 
 /drama=Драматургия
 
 drama_antique=Античная драма
 vaudeville=Водевиль, буффонада
-drama=Драма
-dramaturgy=Драматургия
+drama+literature_drama=Драма
+dramaturgy+foreign_dramaturgy=Драматургия
 screenplays=Киносценарии
 mystery=Мистерия
-scenarios=Сценарии
+scenarios+performance=Сценарии
 tragedy=Трагедия
 
 /art=Искусство, Искусствоведение, Дизайн
 
-architecture_book=Архитектура и скульптура
+architecture+architecture_book=Архитектура и скульптура
 painting=Живопись, альбомы, иллюстрированные каталоги
 design=Искусство и Дизайн
-art_criticism=Искусствоведение
-cine=Кино
+art_criticism+art=Искусствоведение
 nonf_criticism=Критика
 sci_culture=Культурология
-art_world_culture=Мировая художественная культура
+art_world_culture+visual_arts=Мировая художественная культура
 music=Музыка
 notes=Партитуры
 theatre=Театр
+music_dancing=Музыка и танцы
+cinema_theatre+cine=Кино и театр
 
 /computer=Компьютеры и Интернет
 
 comp_hard=Аппаратное обеспечение, компьютерное железо
 comp_db=Базы данных
 comp_www=Интернет
-computers=Околокомпьютерная литература, зарубежная компьютерная
+computers+foreign_comp=Компьютерная литература
 comp_osnet=ОС и Сети
 comp_programming=Программирование
 comp_soft=Программы
@@ -125,18 +134,18 @@ comp_dsp=Цифровая обработка сигналов
 
 /child=Литература для детей
 
-children=Детская литература: прочее
+children+child_characters+detskaya-literatura+child_3+child_4+child_5+child_6+child_7+child_8+child_9+child_animals+child_nature=Детская литература: прочее
 child_education=Детская образовательная литература
 child_prose=Детская проза
 child_adv=Детские приключения
 child_verse=Детские стихи
-child_folklore=Детский фольклор
+child_folklore+child_tale+child_tale_rus=Детский фольклор
 foreign_children=Зарубежная литература для детей
 child_classical=Классическая детская литература
 prose_game=Книга-игра
 ya=Подростковая литература
-child_tale_rus=Русские сказки
-child_tale=Сказка
+teens_literature+teens_sf=Подростковая литература
+
 
 /love=Любовные романы
 
@@ -144,52 +153,59 @@ love_history=Исторические любовные романы
 love_short=Короткие любовные романы
 love_sf=Любовная фантастика
 love_detective=Любовные детективы
-love=О любви
+love+foreign_love=О любви
 love_hard=Порно
 love_slash=Слэш
-love_contemporary=Современные любовные романы
+love_contemporary+love-contemporary=Современные любовные романы
 love_femslash=Фемслеш
-love_erotica=Эротика
+love_erotica+literature_erotica+18+sf_erotic+fantasy-erotika+love_fantasy=Эротика
+romance+romance_contemporary+romance_multicultural+romance_sf+romance_fantasy+romance_historical=Романтика
 
 /science=Наука, Образование
 
-sci_medicine_alternative=Альтернативная медицина
+sci_popular=Научпоп
+sci_medicine_alternative+health_alt_medicine=Альтернативная медицина
 sci_theories=Альтернативные науки и научные теории
 sci_anachem=Аналитическая химия
 sci_cosmos=Астрономия и Космос
 sci_biology=Биология
+science_biolog=Биология
 sci_biophys=Биофизика
 sci_biochem=Биохимия
 sci_botany=Ботаника
 sci_veterinary=Ветеринария
 sci_oriental=Востоковедение
-sci_geo=Геология и география
+sci_geo+geography_book=Геология и география
 sci_state=Государство и право
 sci_business=Деловая литература
 psy_childs=Детская психология
+foreign_edu=Зарубежная образовательная литература
 sci_zoo=Зоология
 foreign_language=Иностранные языки
-sci_history=История
+sci_history+history+literature_history+history_usa+history_asia+history_world+history_russia+history_europe=История
 sci_philology=Литературоведение
 sci_math=Математика
-sci_medicine=Медицина
+sci_medicine+science_medicine=Медицина
 science=Научная литература
-sci_pedagogy=Педагогика
-sci_politics=Политика
-sci_psychology=Психология
+sci_pedagogy+pedagogy_book=Педагогика
+sci_politics+literature_political+nonfiction_politics=Политика
+sci_psychology+health_psy+science_psy+psy_alassic+foreign_psychology+psy_social=Психология
+psy_generic=Психология общая
 psy_theraphy=Психотерапия и консультирование
 sci_religion=Религиоведение
 sci_abstract=Рефераты
 psy_sex_and_family=Секс и семейная психология
-sci_social_studies=Социология
+sci_social_studies+nonfiction_sociology+nonfiction_social_sci+sociology_book=Социология
 sci_phys=Физика
 sci_physchem=Физическая химия
-sci_philosophy=Философия
-sci_chem=Химия
+sci_philosophy+nonfiction_philosophy+science_history_philosophy=Философия
+sci_chem+sci_orgchem=Химия
 sci_ecology=Экология
-sci_economy=Экономика
-sci_juris=Юриспруденция
+sci_economy+sci_economics=Экономика
+sci_juris+nonfiction_law+professional_law=Юриспруденция
 sci_linguistic=Языкознание
+psy_personal=Личностный рост
+
 
 /poetry=Поэзия
 
@@ -202,7 +218,7 @@ poetry_rus_classical=Классическая русская поэзия
 lyrics=Лирика
 palindromes=Палиндромы
 song_poetry=Песенная поэзия
-poetry=Поэзия
+poetry+literature_poetry+foreign_poetry=Поэзия
 poetry_east=Поэзия Востока
 poem=Поэма, эпическая поэзия
 poetry_modern=Современная поэзия
@@ -215,8 +231,8 @@ epic_poetry=Эпическая поэзия
 adv_story=Авантюрный роман
 adv_western=Вестерн
 adv_history=Исторические приключения
-adv_maritime=Морские приключения
-adventure=Приключения
+adv_maritime+literature_sea=Морские приключения
+adventure+foreign_adventure+literature_adv=Приключения
 adv_modern=Приключения в современном мире
 adv_indian=Приключения про индейцев
 tale_chivalry=Рыцарский роман
@@ -227,7 +243,7 @@ dissident=Антисоветская литература
 aphorisms=Афоризмы и цитаты
 foreign_prose=Зарубежная классическая проза
 prose_history=Историческая проза
-prose_classic=Классическая проза
+prose_classic+literature_classics+literature_rus_classsic=Классическая проза
 literature_18=Классическая проза XVII-XVIII веков
 literature_19=Классическая проза ХIX века
 literature_20=Классическая проза ХX века
@@ -235,52 +251,45 @@ prose_counter=Контркультура
 prose_magic=Магический реализм
 story=Новелла
 great_story=Повесть
-prose=Проза
-short_story=Рассказ
-roman=Роман
+prose+prose_root+proce+literature_world+literature+literature_western=Проза
+short_story+literature_short=Рассказ
+roman+foreign_novel=Роман
 prose_rus_classic=Русская классическая проза
 sagas=Семейный роман/Семейная сага
 prose_sentimental=Сентиментальная проза
-prose_su_classics=Советская классическая проза
-prose_contemporary=Современная проза
+prose_su_classics+literature_su_classics=Советская классическая проза
+prose_contemporary+modern-prose+foreign_contemporary+russian_contemporary=Современная проза
 prose_abs=Фантасмагория, абсурдистская проза
 extravaganza=Феерия
 prose_neformatny=Экспериментальная, неформатная проза
 epistolary_fiction=Эпистолярная проза
 prose_epic=Эпопея
-essay=Эссе, очерк, этюд, набросок
-
-/misc=Прочее
-
-periodic=Газеты и журналы
-visual_arts=Изобразительное искусство, фотография
-beginning_authors=Начинающие авторы
-unfinished=Недописанное
-other=Неотсортированное
-network_literature=Самиздат, сетевая литература
-fanfiction=Фанфик
+essay+literature_essay=Эссе, очерк, этюд, набросок
 
 /religion=Религия и духовность
 
 astrology=Астрология
-religion_budda=Буддизм
+religion_budda+religion_buddhism=Буддизм
 religion_hinduism=Индуизм
 religion_islam=Ислам
 religion_judaism=Иудаизм
 religion_catholicism=Католицизм
-religion_orthodoxy=Православие
+religion_orthodoxy+chris_orthodoxy+chris_pravoslavie=Православие
 religion_protestantism=Протестантизм
 religion=Религиозная литература
-religion_rel=Религия
+religion_rel+foreign_religion=Религия
 religion_self=Самосовершенствование
 palmistry=Хиромантия
-religion_christianity=Христианство
+religion_christianity+chris_edu+chris_fiction=Христианство
 religion_esoterics=Эзотерика
 religion_paganism=Язычество
+religion_occult=Оккультизм
+paranormal=Паранормальные явления
+religion_spirituality=Духовность
 
 /reference=Справочная литература
 
-geo_guides=Путеводители
+geo_guides+geo_guide=Путеводители
 ref_guide=Руководства
 ref_dict=Словари
 reference=Справочная литература
@@ -290,6 +299,7 @@ ref_encyc=Энциклопедии
 /antique=Старинное
 
 antique_ant=Античная литература
+foreign_antique=Античная литература
 antique_east=Древневосточная литература
 antique_european=Древнеевропейская литература
 antique_russian=Древнерусская литература
@@ -313,50 +323,62 @@ tbg_secondary=Учебники и пособия для среднего и сп
 tbg_school=Школьные учебники и пособия, рефераты
 sci_crib=Шпаргалки
 
-/fiction=Фантастика
+/fiction=Фантастика и вымысел
 
-sf_history=Альтернативная история
-sf_action=Боевая фантастика
-fantasy_fight=Боевое фэнтези
+fiction=Художественный вымысел
+sf_history+sf-history+fantasy_alt_hist=Альтернативная история
+sf_action+sf-action=Боевая фантастика
 sf_heroic=Героическая фантастика
-sf_fantasy_city=Городское фэнтези
 gothic_novel=Готический роман
 child_sf=Детская фантастика
 sf_irony=Ироническая фантастика
-sf_fantasy_irony=Ироническое фэнтези
-historical_fantasy=Историческое фэнтези
-sf_cyberpunk=Киберпанк
-sf_space=Космическая фантастика
+sf_cyberpunk+sf_cyber_punk+cyberpunk=Киберпанк
+sf_space+sf-space=Космическая фантастика
 sf_space_opera=Космоопера
-sf_litrpg=ЛитРПГ
 sf_mystic=Мистика
-sf=Научная Фантастика
+sf+foreign_sf+science fiction+science-fiction+sci-fi=Научная фантастика
 nsf=Ненаучная фантастика
-popadanec=Попаданцы
-sf_postapocalyptic=Постапокалипсис
+popadanec+попаданец+попаданцы+popadantsy=Попаданцы
+sf_postapocalyptic+postapocalyptic=Постапокалипсис
 fairy_fantasy=Сказочная фантастика
-russian_fantasy=Славянское фэнтези
 modern_tale=Современная сказка
 sf_social=Социальная фантастика
-sf_stimpank=Стимпанк
-sf_technofantasy=Технофэнтези
-sf_horror=Ужасы
-sf_etc=Фантастика
-sf_fantasy=Фэнтези
-dragon_fantasy=Фэнтези про драконов
+sf_stimpank+steampunk=Стимпанк
+sf_horror+хоррор+horror+horror_usa+horror_occult=Ужасы
+sf_etc+sf_writing=Фантастика
 hronoopera=Хроноопера
 sf_epic=Эпическая фантастика
 sf_humor=Юмористическая фантастика
+sf_fanfiction=Фанфик
+horror_vampires+vampire_book=Вампиры
+
+# фэнтези вынес в отдельную категорию
+/fantasy=Фэнтези
+
+fantasy_alt_hist=Альтернативная история
+fantasy_fight+fantasy-action=Боевое фэнтези
+sf_fantasy_city+city_fantasy+urban-fantasy=Городское фэнтези
+sf_fantasy_irony+ironical-fantasy=Ироническое фэнтези
+historical_fantasy=Историческое фэнтези
+sf_technofantasy=Технофэнтези
+sf_fantasy+foreign_fantasy+фентези+фэнтези+fantasy+приключенческое фэнтези+магия+magician_book+демоны+эльфы=Фэнтези
+russian_fantasy=Славянское фэнтези
+dragon_fantasy=Фэнтези про драконов
+dark-fantasy=Темное фэнтези
+horror_fantasy=Ужасы фэнтези
+epic-fantasy=Эпическое фэнтези
 humor_fantasy=Юмористическое фэнтези
+heroic-fantasy=Героическое фэнтези
+
 
 /folk=Фольклор
 
 epic=Былины
 riddles=Загадки
 folk_songs=Народные песни
-folk_tale=Народные сказки
+folk_tale+literature_fairy=Народные сказки
 proverbs=Пословицы, поговорки
-folklore=Фольклор
+folklore+nonfiction_folklor=Фольклор
 limerick=Частушки, прибаутки, потешки
 
 /humor=Юмор
@@ -364,6 +386,21 @@ limerick=Частушки, прибаутки, потешки
 humor_anecdote=Анекдоты
 comedy=Комедия
 humor_satire=Сатира
-humor=Юмор
+humor+foreign_humor+family_humor+entert_humor+стёб=Юмор
 humor_prose=Юмористическая проза
 humor_verse=Юмористические стихи
+parody+пародия=Пародия
+
+/misc=Прочее
+
+misc=Прочее
+periodic+newspapers=Газеты и журналы
+visual_arts=Изобразительное искусство, фотография
+beginning_authors=Начинающие авторы
+unfinished=Недописанное
+other=Неотсортированное
+network_literature+samizdat=Самиздат, сетевая литература
+fanfiction+au+даркфик+darkfic+фанфик+pov=Фанфик
+sf_litrpg+litrpg+литрпг+sf_litrp=ЛитРПГ
+narrative=Нарратив
+aphorism_quote,афоризмы,цитаты=Афоризмы и цитаты

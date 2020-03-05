@@ -19,6 +19,7 @@ pub struct Book {
     pub lang: Vec<String>,  // lang | translated-lang,source-lang
     pub date: Vec<String>,
     pub genre: Vec<String>,
+    pub keyword: Vec<String>,
     pub author: Vec<Person>,
     pub src_author: Vec<Person>,
     pub translator: Vec<Person>,
@@ -82,7 +83,7 @@ impl Display for Book {
             .zip(self.seqnum.iter())
             .map(|(name, num)| format!("{}-{}", name, num))
             .collect();
-        write!(f, "zip={} file={} enc={} lang={} len={} title={} date={} genre={} author={} src.author={} trans={} seq={} ann.len={} img.len={} warn={}", 
+        write!(f, "zip={} file={} enc={} lang={} len={} title={} date={} genre={} author={} src.author={} trans={} seq={} keyword={} ann.len={} img.len={} warn={}", 
            &self.zipfile, &self.filename, &self.encoding, &self.lang.join(" / "), self.length, &self.title.join(" / "), 
            self.date.join(" / "),
            self.genre.join(", "),
@@ -90,6 +91,7 @@ impl Display for Book {
            person_to_string(&self.src_author),
            person_to_string(&self.translator),
            seq.join(", "),
+           self.keyword.join(", "),
            self.annotation.as_ref().map_or(String::new(), |x| x.len().to_string()),
            self.cover_image.as_ref().map(|x| x.len()).unwrap_or(0),
            self.warning.join(", "),
