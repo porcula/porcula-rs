@@ -9,19 +9,21 @@ use std::str;
 pub struct FB2BookFormat;
 
 enum ParentNode {
+    Start,
     TitleInfo,
     SrcTitleInfo,
+    Body,
 }
 
 enum XMode<'a> {
     Start,
-    Body,
+    Body(ParentNode),
     TitleInfo,
     SrcTitleInfo,
     DocInfo,
     Author(ParentNode),
     Translator,
-    Annotation,
+    Annotation(ParentNode),
     Binary(Cow<'a, [u8]>, Cow<'a, [u8]>), // (id,content-type)
 }
 
@@ -110,7 +112,7 @@ impl BookFormat for FB2BookFormat {
                         match e.name() {
                             b"body" => {
                                 if with_body {
-                                    mode = XMode::Body;
+                                    mode = XMode::Body(ParentNode::Start);
                                 } else {
                                     xml.read_to_end(b"body", &mut buf).unwrap_or_else(|e| {
                                         warning.push(format!(
@@ -185,7 +187,7 @@ impl BookFormat for FB2BookFormat {
                         b"translator" => mode = XMode::Translator,
                         b"annotation" => {
                             if with_annotation {
-                                mode = XMode::Annotation;
+                                mode = XMode::Annotation(ParentNode::TitleInfo);
                             } else {
                                 xml.read_to_end(b"annotation", &mut buf)
                                     .unwrap_or_else(|e| {
@@ -304,6 +306,7 @@ impl BookFormat for FB2BookFormat {
                                 mode = XMode::SrcTitleInfo;
                                 src_author.push(person);
                             }
+                            _ => ()
                         }
                         person = Person::new();
                     }
@@ -343,16 +346,20 @@ impl BookFormat for FB2BookFormat {
                     Ok(Event::End(ref e)) if e.name() == b"document-info" => mode = XMode::Start,
                     _ => (),
                 },
-                XMode::Annotation => match event {
+                XMode::Annotation(ref parent) => match event {
                     Ok(Event::Text(e)) => {
                         if let Ok(u) = e.unescaped() {
                             annotation.push(String::from(xml.decode(&u)));
                         }
                     }
-                    Ok(Event::End(ref e)) if e.name() == b"annotation" => mode = XMode::TitleInfo,
+                    Ok(Event::End(ref e)) if e.name() == b"annotation" => 
+                        mode = match parent {
+                            ParentNode::TitleInfo => XMode::TitleInfo,
+                            _ => XMode::Body(ParentNode::Start)
+                        },
                     _ => (),
                 },
-                XMode::Body => match event {
+                XMode::Body(_) => match event {
                     Ok(Event::Text(e)) => {
                         if let Ok(u) = e.unescaped() {
                             body.push(String::from(xml.decode(&u)));
@@ -470,7 +477,7 @@ impl BookFormat for FB2BookFormat {
                                     BytesStart::borrowed_name(b"div").with_attributes(attrs),
                                 );
                                 res.push(tag);
-                                mode = XMode::Body;
+                                mode = XMode::Body(ParentNode::Start);
                             }
                             b"title-info" => mode = XMode::TitleInfo,
                             b"binary" => {
@@ -497,7 +504,7 @@ impl BookFormat for FB2BookFormat {
                 },
                 XMode::TitleInfo => match event {
                     Ok(Event::Start(ref e)) => match e.name() {
-                        b"annotation" => mode = XMode::Annotation,
+                        b"annotation" => mode = XMode::Annotation(ParentNode::TitleInfo),
                         b"image" => {
                             if let Some(a) = get_attr_raw(b"href", &mut e.attributes()) {
                                 let mut href = a.value.to_vec();
@@ -519,7 +526,7 @@ impl BookFormat for FB2BookFormat {
                     Ok(Event::End(ref e)) if e.name() == b"title-info" => mode = XMode::Start,
                     _ => (),
                 },
-                XMode::Annotation | XMode::Body => match &event {
+                XMode::Annotation(ref parent) | XMode::Body(ref parent) => match &event {
                     Ok(Event::Start(ref e)) => {
                         match e.name() {
                             b"p" | b"strong" | b"sup" | b"sub" | b"table" | b"tr" | b"th"
@@ -565,7 +572,11 @@ impl BookFormat for FB2BookFormat {
                     }
                     Ok(Event::Text(_)) => res.push(event.unwrap().into_owned()),
                     Ok(Event::End(ref e)) => match e.name() {
-                        b"annotation" => mode = XMode::TitleInfo,
+                        b"annotation" => 
+                            mode = match parent {
+                                ParentNode::TitleInfo => XMode::TitleInfo,
+                                _ => XMode::Body(ParentNode::Body)
+                            },
                         b"body" => {
                             res.push(Event::End(BytesEnd::borrowed(b"div")));
                             mode = XMode::Start;
