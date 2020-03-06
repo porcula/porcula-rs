@@ -516,7 +516,7 @@ impl BookFormat for FB2BookFormat {
                                     value: Cow::Owned(href),
                                 }];
                                 let tag = Event::Start(
-                                    BytesStart::borrowed_name(b"img").with_attributes(attrs),
+                                    BytesStart::borrowed_name(b"image").with_attributes(attrs),
                                 );
                                 res.push(tag);
                             }

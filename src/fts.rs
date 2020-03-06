@@ -291,6 +291,8 @@ impl BookWriter {
                 if !i.contains('_') {
                     keyword.push(i.to_lowercase());
                 }
+                //duplicate genre translation as keyword
+                keyword.push(genre_map.translate(i).to_lowercase());
             }
         }
         if genre_facet.is_empty() {

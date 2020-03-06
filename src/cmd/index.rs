@@ -43,18 +43,21 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
     let num_threads = matches
         .value_of("threads")
         .map(|x| x.parse::<usize>().unwrap_or(0));
-    let heap_mb_str = matches.value_of("memory").unwrap_or(DEFAULT_HEAP_SIZE);
+    let heap_mb_str = matches.value_of("memory").unwrap_or(DEFAULT_HEAP_SIZE_MB);
     let heap_size: usize = heap_mb_str.parse().expect(&format!(
         "{} {}",
         tr!["Invalid memory size", "Некорректный размер"],
         heap_mb_str
     ));
-    let batch_size_str = matches.value_of("batch-size").unwrap_or(DEFAULT_BATCH_SIZE);
-    let batch_size: usize = batch_size_str.parse().expect(&format!(
+    let batch_size_str = matches
+        .value_of("batch-size")
+        .unwrap_or(DEFAULT_BATCH_SIZE_MB);
+    let mut batch_size: usize = batch_size_str.parse().expect(&format!(
         "{} {}",
         tr!["Invalid batch size", "Некорректное число"],
         heap_mb_str
     ));
+    batch_size = batch_size * 1024 * 1024; //MB -> bytes
     app.load_genre_map();
     //open index
     let mut book_writer = crate::fts::BookWriter::new(
@@ -302,14 +305,16 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         book_writer
             .add_file_record(&zipfile, "WHOLE", book_indexed)
             .unwrap_or(()); //mark whole archive as indexed
-        if app.debug {
-            println!("Commit: start");
-        }
-        let ct = Instant::now();
-        book_writer.commit().unwrap();
-        time_to_commit += ct.elapsed().as_millis();
-        if app.debug {
-            println!("Commit: done");
+        if book_indexed_size > 0 {
+            if app.debug {
+                println!("Commit: start");
+            }
+            let ct = Instant::now();
+            book_writer.commit().unwrap();
+            time_to_commit += ct.elapsed().as_millis();
+            if app.debug {
+                println!("Commit: done");
+            }
         }
         zip_index += 1;
         zip_progress_size += zip_size;
@@ -320,6 +325,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
     } else {
         println!("{}", tr!["Indexing done", "Индексация завершена"]);
     }
+    let total = tt.elapsed().as_millis();
     println!(
         "{}: {}/{} = {}/{} MB",
         tr!["Archives", "Архивов"],
@@ -340,6 +346,11 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         tr!["skipped", "пропущено"]
     );
     println!(
+        "{}: {} MB/s",
+        tr!["Average speed", "Средняя скорость"],
+        (book_parsed_size as u128) / total * 1000 / 1024 / 1024,
+    );
+    println!(
         "{}: {}, {}: {}",
         tr!["Errors", "Ошибок"],
         error_count,
@@ -347,7 +358,6 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         warning_count,
     );
     if app.debug {
-        let total = tt.elapsed().as_millis();
         println!("Main thread: elapsed {}m {}s archive open {}%, parse {}%, image resize {}%, create document {}%, commit {}%",
             total/1000/60, total/1000-(total/1000/60)*60,
             time_to_open_zip*100/total,

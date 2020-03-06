@@ -56,13 +56,16 @@ impl GenreMap {
         })
     }
 
-    pub fn path_for<'a>(&'a self, code: &str) -> String {
-        //normalize code
-        let code = code
-            .chars()
+    ///normalize code
+    fn normalize<'a>(&'a self, code: &str) -> String {
+        code.chars()
             .filter(|&c| c.is_alphanumeric() || c.is_whitespace() || c == '-' || c == '_')
             .collect::<String>()
-            .to_lowercase();
+            .to_lowercase()
+    }
+
+    pub fn path_for<'a>(&'a self, code: &str) -> String {
+        let code = self.normalize(code);
         //map to primary code
         let primary = self.code_to_prim.get(&code).unwrap_or(&code);
         //map to category
@@ -72,5 +75,13 @@ impl GenreMap {
             .map(|x| x.as_str())
             .unwrap_or("misc");
         format!("{}/{}", cat, primary)
+    }
+
+    pub fn translate<'a>(&'a self, code: &str) -> String {
+        let code = self.normalize(code);
+        match self.translation.get(code.as_str()) {
+            Some(ref t) => t.to_string(),
+            None => code,
+        }
     }
 }

@@ -116,7 +116,7 @@ fn main() {
                 )
                 .arg(
                     Arg::with_name("heap-memory")
-                        .default_value(DEFAULT_HEAP_SIZE)
+                        .default_value(DEFAULT_HEAP_SIZE_MB)
                         .short("m")
                         .long("heap-memory")
                         .takes_value(true)
@@ -129,7 +129,7 @@ fn main() {
                         .long("batch-size")
                         .takes_value(true)
                         .value_name("MB")
-                        .default_value(DEFAULT_BATCH_SIZE)
+                        .default_value(DEFAULT_BATCH_SIZE_MB)
                         .help(tr![
                             "Commit after each N-th megabytes",
                             "Сохранение каждых N мегабайт"
@@ -305,7 +305,7 @@ fn main() {
         std::process::exit(1);
     });
 
-    let mut index_settings = IndexSettings::load(&index_path).unwrap_or_else(|e| {
+    let mut index_settings = IndexSettings::load(&index_path, debug).unwrap_or_else(|e| {
         eprintln!("{}", e);
         std::process::exit(1);
     });
@@ -348,8 +348,7 @@ fn main() {
     //////////////////////QUERY MODE
     else if let Some(matches) = query_mode_matches {
         run_query(matches, &app);
-    }
-    else if let Some(matches) = facet_mode_matches {
+    } else if let Some(matches) = facet_mode_matches {
         run_facet(matches, &app);
     }
     //////////////////////SERVER MODE [default]

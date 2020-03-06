@@ -4,14 +4,14 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
-mod index;
-mod server;
-mod query;
 mod facet;
-pub use self::index::run_index;
-pub use self::server::run_server;
-pub use self::query::run_query;
+mod index;
+mod query;
+mod server;
 pub use self::facet::run_facet;
+pub use self::index::run_index;
+pub use self::query::run_query;
+pub use self::server::run_server;
 
 use crate::assets;
 use crate::fts::BookReader;
@@ -22,8 +22,8 @@ pub const INDEX_SETTINGS_FILE: &'static str = "porcula_index_settings.json";
 pub const DEFAULT_LANGUAGE: &'static str = "ru";
 pub const DEFAULT_INDEX_DIR: &'static str = "index";
 pub const DEFAULT_BOOKS_DIR: &'static str = "books";
-pub const DEFAULT_HEAP_SIZE: &'static str = "100";
-pub const DEFAULT_BATCH_SIZE: &'static str = "100";
+pub const DEFAULT_HEAP_SIZE_MB: &'static str = "100";
+pub const DEFAULT_BATCH_SIZE_MB: &'static str = "300";
 pub const DEFAULT_LISTEN_ADDR: &'static str = "127.0.0.1:8083";
 pub const DEFAULT_QUERY_HITS: usize = 10;
 pub const DEFAULT_BASE_URL: &'static str = "/porcula";
@@ -78,14 +78,16 @@ macro_rules! tr {
 
 impl IndexSettings {
     // load or create settings stored with index
-    pub fn load(index_path: &Path) -> Result<Self, String> {
+    pub fn load(index_path: &Path, debug: bool) -> Result<Self, String> {
         let filename = index_path.join(INDEX_SETTINGS_FILE);
         if let Ok(f) = std::fs::File::open(&filename) {
-            println!(
-                "{} {}",
-                tr!["Reading settings", "Читаем настройки"],
-                filename.display()
-            );
+            if debug {
+                println!(
+                    "{} {}",
+                    tr!["Reading settings", "Читаем настройки"],
+                    filename.display()
+                );
+            }
             match serde_json::from_reader(f) {
                 Ok(s) => return Ok(s),
                 Err(e) => {
