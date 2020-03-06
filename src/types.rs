@@ -1,4 +1,5 @@
 use deepsize::DeepSizeOf;
+use std::collections::HashMap;
 use std::io::BufRead;
 
 #[derive(Debug, DeepSizeOf)]
@@ -66,6 +67,8 @@ pub trait BookFormat: Send + Sync {
 
     fn str_to_html(&self, decoded_xml: &str) -> RenderResult;
 }
+
+pub type BookFormats = HashMap<&'static str, Box<dyn BookFormat + Send + Sync>>;
 
 use std::fmt::{Display, Formatter, Result};
 

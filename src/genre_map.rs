@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::io::BufRead;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Default)]
 pub struct GenreMap {
     code_to_prim: HashMap<String, String>, //genre code to primary code
     prim_to_cat: HashMap<String, String>,  //primary genre code to category code

@@ -305,7 +305,7 @@ impl BookFormat for FB2BookFormat {
                                 mode = XMode::SrcTitleInfo;
                                 src_author.push(person);
                             }
-                            _ => ()
+                            _ => (),
                         }
                         person = Person::new();
                     }
@@ -351,11 +351,12 @@ impl BookFormat for FB2BookFormat {
                             annotation.push(String::from(xml.decode(&u)));
                         }
                     }
-                    Ok(Event::End(ref e)) if e.name() == b"annotation" => 
+                    Ok(Event::End(ref e)) if e.name() == b"annotation" => {
                         mode = match parent {
                             ParentNode::TitleInfo => XMode::TitleInfo,
-                            _ => XMode::Body(ParentNode::Start)
-                        },
+                            _ => XMode::Body(ParentNode::Start),
+                        }
+                    }
                     _ => (),
                 },
                 XMode::Body(_) => match event {
@@ -571,14 +572,14 @@ impl BookFormat for FB2BookFormat {
                     }
                     Ok(Event::Text(_)) => res.push(event.unwrap().into_owned()),
                     Ok(Event::End(ref e)) => match e.name() {
-                        b"annotation" => 
+                        b"annotation" => {
                             if let ParentNode::TitleInfo = parent {
                                 mode = XMode::TitleInfo;
-                            } 
-                            else {
+                            } else {
                                 //<annotation> inside <body>
                                 res.push(Event::End(BytesEnd::borrowed(b"div")));
-                            },
+                            }
+                        }
                         b"body" => {
                             res.push(Event::End(BytesEnd::borrowed(b"div")));
                             mode = XMode::Start;
