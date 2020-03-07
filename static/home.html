@@ -21,7 +21,7 @@
                 <span class="at_field">
                     <span data-field="title">название</span>
                     <span data-field="author">автор</span>
-                    <span data-field="translator">переводчик</span>
+                    <span data-field="translator">перевод</span>
                     <span data-field="sequence">серия</span>
                     <span data-field="annotation">аннотация</span>
                     <span data-field="body">текст</span>
@@ -85,7 +85,7 @@
     <script>
         var size100pct = 5000000;
         var page = 0;
-        var page_size = storage.getItem("page_size") || 20;
+        var page_size = +(storage.getItem("page_size") || 20);
         var last_page = 0;
         var order = "default";
         var genre_translation = {};
@@ -288,7 +288,8 @@
                     ;
             }
             if (append) {
-                var last_row = $("#result tr:visible:last-of-type")[0];
+                var visible = $("#result tr:visible");
+                var last_row = visible[visible.length-1]; //fix problem with .last() 
                 $("#result tr.appended").removeClass("appended");
                 $("#result tbody").append(tab);
                 last_row.scrollIntoView(true);

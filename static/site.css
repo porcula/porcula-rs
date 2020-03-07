@@ -4,6 +4,7 @@
     box-sizing: border-box; 
 }
 body {
+    width: 100vw;
     margin: auto;
     padding: 5px 5px 20px 5px;
     font: 12pt Arial;
@@ -49,9 +50,9 @@ button.expanded {
 
 .nav.bottom {
     width: 100%;
-    text-align: center;
 }
 .next.bottom {
+    margin-left: 96px;
     width: 50%;
 }
 
@@ -511,6 +512,7 @@ table.list-result {
 
     #result {
         border: none;
+        border-bottom: 2px solid #222;
     }
 
     .download {
