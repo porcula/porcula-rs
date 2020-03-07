@@ -64,7 +64,7 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
         router!(req,
             (GET) (/book/count) => { handler_count(&req, &fts) },
             (GET) (/search) => { handler_search(&req, &fts, app.debug) },
-            (GET) (/facet) => { handler_facet(&req, &fts) },
+            (GET) (/facet) => { handler_facet(&req, &fts, app.debug) },
             (GET) (/genre/translation) => { Response::json(&app.genre_map.translation) },
             (GET) (/book/{zipfile: String}/{filename: String}/cover) => { handler_cover(&req, &fts, &zipfile, &filename) },
             (GET) (/book/{zipfile: String}/{filename: String}/render) => { handler_render(&req, &fts, &app, &zipfile, &filename) },
@@ -106,13 +106,18 @@ fn handler_search(req: &Request, fts: &BookReader, debug: bool) -> Response {
     }
 }
 
-fn handler_facet(req: &Request, fts: &BookReader) -> Response {
+fn handler_facet(req: &Request, fts: &BookReader, debug: bool) -> Response {
     let hits: Option<usize> = match req.get_param("hits") {
         Some(x) => Some(x.parse().unwrap_or(DEFAULT_QUERY_HITS)),
         None => None,
     };
+    let req_query = req.get_param("query");
+    let opt_query = match req_query {
+        Some(ref s) if s != "" => Some(s.as_str()),
+        _ => None
+    };
     match req.get_param("path") {
-        Some(path) => match fts.get_facet(&path, hits) {
+        Some(path) => match fts.get_facet(&path, opt_query, hits, debug) {
             Ok(ref data) => Response::json(data),
             Err(e) => Response::text(e.to_string()).with_status_code(500),
         },

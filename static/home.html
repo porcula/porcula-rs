@@ -15,7 +15,7 @@
             <button id="search">Искать</button>
             <a class="list" href="genres.html">Жанры</a>
             <a class="list" href="authors.html">Авторы</a>
-            <a class="list" href="keywords.html">КС</a>
+            <a class="list" href="keywords.html" title="Ключевые слова">КС</a>
             <div id="extra_tools" class="mh">
                 <span>Всего книг: <span id="book_count"></span></span>
                 <span class="at_field">
@@ -25,7 +25,6 @@
                     <span data-field="sequence">серия</span>
                     <span data-field="annotation">аннотация</span>
                     <span data-field="body">текст</span>
-                    <span data-field="genre">жанр</span>
                 </span>
                 <span>
                     <label for="page_size" class="hdiv">Строк на странице:</label>
@@ -86,7 +85,7 @@
     <script>
         var size100pct = 5000000;
         var page = 0;
-        var page_size = 20;
+        var page_size = storage.getItem("page_size") || 20;
         var last_page = 0;
         var order = "default";
         var genre_translation = {};
@@ -132,6 +131,7 @@
             if (page_size == 100) { page_size = 20; }
             else if (page_size == 1000) { page_size = 100; }
             $("#page_size").val(page_size);
+            storage.setItem("page_size", page_size);
             page = Math.trunc(skip / page_size);
             search(false);
         }
@@ -141,6 +141,7 @@
             if (page_size == 100) { page_size = 1000; }
             else if (page_size == 20) { page_size = 100; }
             $("#page_size").val(page_size);
+            storage.setItem("page_size", page_size);
             page = Math.trunc(skip / page_size);
             search(false);
         }
@@ -151,7 +152,7 @@
             var v = q.val();
             var i = q[0].selectionStart;
             var j = q[0].selectionEnd;
-            var s1 = i > 0 ? v.substring(0, i - 1) : "";
+            var s1 = i > 0 ? v.substring(0, i) : "";
             var s2 = j < v.length ? v.substring(j) : "";
             if (s1.length > 0 && s1.substring(-1) != ' ') s1 += ' ';
             var s = s1.length + f.length;
@@ -173,6 +174,7 @@
             $(".order[data-order='" + order + "']").addClass("ordered");
             var skip = page * page_size;
             $('#total').text("");
+            storage.setItem("last_query", query);
             $.ajax({
                 url: "search",
                 data: { "query": query, "order": order, "limit": page_size, "offset": skip },
@@ -273,20 +275,20 @@
                 tab += '<tr class="detail hidden">'
                     + '<td class="action" colspan="2"><a href="' + down_url + '"><img class="download cover" src="defcover.png"></a></td>'
                     + '<td colspan="6"><div class="gridc">'
-                    + (ex("translator") ? '<div class="n translator">Переводчик</div><div class="v translator">' + vale("translator",", ") + '</div>' : '')
+                    + (ex("translator") ? '<div class="n mv translator">Перевод</div><div class="v mv translator">' + vale("translator",", ") + '</div>' : '')
                     + (ex("src_author") ? '<div class="n2 src_author">Ориг.автор</div><div class="v2 src_author">' + vale("src_author",", ") + '</div>' : '')
                     + (ex("sequence") ? '<div class="n ms sequence">Серия</div><div class="v ms sequence">' + vale("sequence",", ") + " " + valz("seqnum") + '</div>' : '')
                     + (ex("date") ? '<div class="n date">Дата</div><div class="v date">' + vale("date"," / ") + '</div>' : '')
                     + '<div class="n2 lang">Язык</div><div class="v2 lang">' + vale("lang"," ← ") + '</div>'
                     + (genre ? '<div class="n genre">Жанр</div><div class="v genre">' + genre + '</div>' : '')
-                    + (ex("keyword") ? '<div class="n keyword">Ключевые слова</div><div class="v keyword">' + vale("keyword") + '</div>' : '')
+                    //+ (ex("keyword") ? '<div class="n keyword">Ключевые слова</div><div class="v keyword">' + vale("keyword") + '</div>' : '')
                     + '<div class="n2 length">Длина</div><div class="v2 length">' + size_pretty(valz("length")) + '</div>'
                     + (ex("annotation") ? '<div class="n annotation">Аннотация</div><div class="v-span annotation">' + vale("annotation") + '</div>' : '')
                     + '</div></td></tr>'
                     ;
             }
             if (append) {
-                var last_row = $("#result tr:visible").last()[0];
+                var last_row = $("#result tr:visible:last-of-type")[0];
                 $("#result tr.appended").removeClass("appended");
                 $("#result tbody").append(tab);
                 last_row.scrollIntoView(true);
@@ -347,6 +349,11 @@
             page = 0;
             search(false);
         });
+
+        $("#result").on("click", ".annotation", function (e) {
+            $(this).parent().css({height:"auto"});
+        });
+
 
         $("#show_query_hint").click(function () {
             $("#query_hint").toggle();

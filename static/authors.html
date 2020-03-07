@@ -7,6 +7,7 @@
 </head>
 <body>
     <h1>Cписок авторов <a href="home.html">назад</a></h1>
+    <input id="for_last_query" type="checkbox" class="hidden">только для ранее найденных книг <span id="query" class="query"></span><br>
     <div id="letters"></div>
     Фильтр <input type="text" id="substr" value="">
     <table id="list" style="display:none">
@@ -19,6 +20,15 @@
     <script src="jquery-1.12.4.min.js"></script>
     <script src="common.js"></script>
     <script>
+        var last_query = storage.getItem("last_query") || "";
+        var query = "";
+        var letter = "";
+        if (last_query) {
+            $("#query").text(last_query);
+            $("#for_last_query").show();
+        }
+        refresh();
+
         function filter_list() {
             var re = new RegExp($("#substr").val(), 'i');
             $(".row").hide().filter(function () {
@@ -26,35 +36,47 @@
             }).show();
         }
         $("#substr").change(filter_list).keyup(filter_list);
-
-        $.getJSON("facet", {path:"/author"}, function (facet) {
-            var max = 0;
-            var filtered = {};
-            for (var i in facet) {
-                var m = i.match(/^\/author\/([A-ZА-ЯЁ])/i);
-                if (m) {
-                    var v = +facet[i];
-                    filtered[m[1]] = v;
-                    if (v>max) max = v;
-                }
-            }
-            var html = "";
-            var ordered = sort_keys(filtered);
-            for (var i in ordered) {
-                var n = ordered[i];
-                var v = filtered[n];
-                var pct = Math.trunc((1 * v) / max * 100 / 5) * 5;
-                if (pct > 100) pct = 100;
-                var cls = 'bk' + pct;
-                html += '<span class="prefix gauge bk'+pct+'">'+esc(n)+'</span>';
-            }
-            $("#letters").html(html);
+        
+        $("#for_last_query").change(function(){
+            query = $("#for_last_query:checked").length>0 ? last_query : "";
+            refresh();
         });
 
-        $("#letters").on("click",".prefix",function(){
+        function refresh() {
+            $.getJSON("facet", {path:"/author", query: query}, function (facet) {
+                var max = 0;
+                var filtered = {};
+                for (var i in facet) {
+                    var m = i.match(/^\/author\/([A-ZА-ЯЁ])/i);
+                    if (m) {
+                        var v = +facet[i];
+                        filtered[m[1]] = v;
+                        if (v>max) max = v;
+                    }
+                }
+                var html = "";
+                var ordered = sort_keys(filtered);
+                for (var i in ordered) {
+                    var n = ordered[i];
+                    var v = filtered[n];
+                    var pct = Math.trunc((1 * v) / max * 100 / 5) * 5;
+                    if (pct > 100) pct = 100;
+                    var cls = 'bk' + pct;
+                    html += '<span class="prefix gauge bk'+pct+'">'+esc(n)+'</span>';
+                }
+                $("#letters").html(html);
+                if (letter!="") list_on_letter();
+            });
+        }
+
+        $("#letters").on("click",".prefix", function() {
+            letter = $(this).text();
+            list_on_letter();
+        });
+
+        function list_on_letter(){
             $("#list").show();
-            var letter = $(this).text();
-            $.getJSON("facet", {path:"/author/"+letter}, function (facet) {
+            $.getJSON("facet", {path:"/author/"+letter, query: query}, function (facet) {
                 var max = 0;
                 for (var i in facet) {
                     var v = +facet[i];
@@ -74,7 +96,7 @@
                 }
                 $("#list tbody").html(html);
             });
-        });
+        }
 
         function sort_keys(obj) {
             var keys = Object.keys(obj);

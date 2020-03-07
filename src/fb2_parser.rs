@@ -405,6 +405,7 @@ impl BookFormat for FB2BookFormat {
             .flat_map(|c| c.split(","))
             .map(|c| c.trim())
             .filter(|c| !c.is_empty())
+            .filter(|c| *c != "antique") //assigned by default
             .map(|c| c.to_lowercase())
             .collect();
 

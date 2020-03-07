@@ -7,9 +7,10 @@
 </head>
 <body>
     <h1>Cписок жанров <a href="home.html">назад</a></h1>
-    <button id="expand_all">раскрыть</button>
+    <input id="for_last_query" type="checkbox" class="hidden">только для ранее найденных книг <span id="query" class="query"></span><br>
+    <button id="expand_collapse_all" class="expand">раскрыть</button>
     Фильтр <input type="text" id="substr" value="">
-    <table class="result">
+    <table class="list-result">
         <thead><tr><th colspan=2>Жанр</th><th>Книг</th></tr></thead>
         <tbody></tbody>
     </table>
@@ -17,17 +18,30 @@
         .L1 { padding-left:0; font-weight: bold; }
         .L2 { padding-left:4em }
         .v { width: 5em; text-align: right; }
-        .expand { font-size: 120%; font-weight: bold; cursor: pointer; vertical-align: top; }
     </style>
     <div id="loading" style="display:none"></div>
     <script src="jquery-1.12.4.min.js"></script>
     <script src="common.js"></script>
     <script>
+        var last_query = storage.getItem("last_query") || "";
+        var query = "";
         var translation;
+        if (last_query) {
+            $("#query").text(last_query);
+            $("#for_last_query").show();
+        }
+
         $.when(
             $.getJSON("genre/translation", function (data) { translation = data; })
-        ).then(function(){ 
-            $.getJSON("facet", {path:"/genre"}, function (facet) {
+        ).then(refresh);
+
+        $("#for_last_query").change(function(){
+            query = $("#for_last_query:checked").length>0 ? last_query : "";
+            refresh();
+        });
+
+        function refresh(){ 
+            $.getJSON("facet", {path:"/genre", query: query}, function (facet) {
                 // {path: count-value}, path ::= '/genre/<category>'
                 var max = 0;
                 for (var path in facet) {
@@ -45,6 +59,7 @@
                 }
                 var ordered = sort_by_prop(facet,'k');
                 var tab = "";
+                var id = 0;
                 for (var i in ordered) {
                     var path = ordered[i];
                     var t = facet[path].t;
@@ -52,27 +67,51 @@
                     var pct = Math.trunc((1 * v) / max * 100 / 5) * 5;
                     if (pct > 100) pct = 100;
                     var url = 'home.html?query='+ encodeURIComponent('facet:"' + path + '"');
-                    tab += '<tr class="row"><td class="expand" data-path="'+path+'">+</td><td class="L1"><a href="'+url+'" class="tdlink">' 
+                    tab += '<tr class="row" data-id="'+id+'" data-path="'+path+'"><td class="node collapsed">+</td><td class="L1"><a href="'+url+'" class="tdlink">' 
                         + esc(t) + '</a></td><td class="v gauge g' + pct + '">' + v + '</td></tr>';
+                    id += 1;
                 }
-                $(".result tbody").html(tab);
+                $(".list-result tbody").html(tab);
                 filter_list();
             });
-        });
+        }
 
-        $(".result tbody").on("click",".expand", function(){ expand(this); });
-        $("#expand_all").click(function(){
-            $(".expand").each(function(){ expand(this); });
+        $("#expand_collapse_all").click(function(){
+            $(this).toggleClass("expanded");
+            if ($(this).hasClass("expanded")) {
+                $(".node.collapsed").each(function(){ expand(this); });
+            }
+            else {
+                $(".node.expanded").each(function(){ collapse(this); });
+            }
         });
+        $(".list-result tbody").on("click",".node.collapsed", function(){ expand(this); });
+        $(".list-result tbody").on("click",".node.expanded",  function(){ collapse(this); });
+
+        function collapse(node){ 
+            var td = $(node);
+            var parent_row = td.parent();
+            var parent_id = parent_row.data("id");
+            $("tr.child.of"+parent_id).hide();
+            td.removeClass("expanded");
+            td.addClass("collapsed");
+            td.text("+");
+        }
 
         function expand(node) {
             var td = $(node);
-            var root = td.data("path");
-            var row = td.parent();
-            td.removeClass("expand");
-            td.text("");
+            var parent_row = td.parent();
+            td.removeClass("collapsed");
+            td.addClass("expanded");
+            td.text("-");
+            var parent_id = parent_row.attr("data-id");
+            var root = parent_row.attr("data-path");
+            if (parent_row.hasClass("loaded")) {
+                $("tr.child.of"+parent_id).show();
+                return;
+            }
             var grouped = {};
-            $.getJSON("facet", {path:root}, function (facet) {
+            $.getJSON("facet", {path:root, query: query}, function (facet) {
                 // {path: count-value}, path ::= '/genre/<category>/<genre>'
                 var grouped = {}; //by translation
                 for (var path in facet) {
@@ -108,10 +147,11 @@
                     for (var j in path_arr) {
                         url += encodeURIComponent('facet:"' + path_arr[j] + '" ');
                     }
-                    tab += '<tr class="row"><td></td><td class="L2"><a href="'+url+'" class="tdlink">' 
+                    tab += '<tr class="row child of'+parent_id+'"><td></td><td class="L2"><a href="'+url+'" class="tdlink">' 
                         + esc(t) + '</a></td><td class="v gauge g' + pct + '">' + v + '</td></tr>';
                 }
-                row.after(tab);
+                parent_row.after(tab);
+                parent_row.addClass("loaded");
                 filter_list();
             });
         }

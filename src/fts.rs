@@ -536,11 +536,16 @@ impl BookReader {
         Ok(None)
     }
 
-    pub fn get_facet(&self, path: &str, hits: Option<usize>) -> Result<HashMap<String, u64>> {
+    pub fn get_facet(&self, path: &str, query: Option<&str>, hits: Option<usize>, debug: bool) -> Result<HashMap<String, u64>> 
+    {
         let searcher = self.reader.searcher();
         let mut facet_collector = FacetCollector::for_field(self.fields.facet);
         facet_collector.add_facet(path);
-        let facet_counts = searcher.search(&AllQuery, &facet_collector)?;
+        let query = match query {
+            Some(q) => self.parse_query(q, debug).unwrap(),
+            None => Box::new(AllQuery),
+        };
+        let facet_counts = searcher.search(&query, &facet_collector)?;
         let mut facets = HashMap::<String, u64>::new();
         if let Some(k) = hits {
             for (facet, count) in facet_counts.top_k(path, k) {

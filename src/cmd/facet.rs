@@ -17,7 +17,7 @@ pub fn run_facet(matches: &ArgMatches, app: &Application) {
                 hits_str
             )));
         }
-        match fts.get_facet(&path, hits) {
+        match fts.get_facet(path, None, hits, app.debug) {
             Ok(res) => {
                 println!("{}", serde_json::to_string(&res).unwrap());
                 std::process::exit(0);

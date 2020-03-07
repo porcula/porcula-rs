@@ -15,6 +15,15 @@ if (!Math.trunc) { //polyfill for old eBooks
     };
 }
 
+//certain olde browser have no localStorage and does not allow polyfill it
+var storage = window.localStorage ? window.localStorage : {
+    _data       : {},
+    setItem     : function(id, val) { return this._data[id] = String(val); },
+    getItem     : function(id) { return this._data.hasOwnProperty(id) ? this._data[id] : undefined; },
+    removeItem  : function(id) { return delete this._data[id]; },
+    clear       : function() { return this._data = {}; }
+};
+
 function size_pretty(s) {
     if (s < 1024) { return s + ""; }
     s = Math.trunc(s / 1024);

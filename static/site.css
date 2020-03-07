@@ -31,6 +31,13 @@ button {
     border: none;
     padding: 1px 1em 1px 1em;
 }
+button.expand {
+    cursor: pointer;
+}
+button.expanded {
+    color: #fefefe;
+    background-color: #222;
+}
 
 #footer {
     padding: 1em 1em 1em 1em;
@@ -46,13 +53,6 @@ button {
 }
 .next.bottom {
     width: 50%;
-}
-.nav .expand {
-    cursor: pointer;
-}
-.nav .expanded {
-    color: #fefefe;
-    background-color: #222;
 }
 
 #filter {
@@ -90,7 +90,7 @@ button {
 
 a.list {
     text-decoration: none;
-    padding: 2px 1em 1px 1em;
+    padding: 2px 0.5em 1px 0.5em;
     background-color: #bababa;
     color: #222;
 }
@@ -109,10 +109,13 @@ a.list:visited {
     border-collapse: collapse;
     width: 100%;
 }
-tr {
+#result tr {
     border-top: 1px solid #222;
     padding-top: 2px;
     padding-bottom: 2px;
+}
+#result tr.detail {
+    border-top: none;
 }
 tr:hover {
   background-color: lightyellow;
@@ -185,7 +188,7 @@ tr.expanded td.author {
     white-space: normal;
 }
 .translator {
-    max-width: 10em;
+    max-width: 15em;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -238,8 +241,31 @@ tr.expanded td.author {
     background-color: #d8d9ac;
 }
 
+table.list-result {
+    border-collapse: collapse;
+}
+.node.collapsed {
+    padding: 0 1em 0 1em;
+    border: none;
+    text-align: center;
+    background-color: #fefefe;
+    font-weight: bold; 
+    cursor: pointer; 
+}
+.node.expanded {
+    padding: 0 1em 0 1em;
+    border: none;
+    text-align: center;
+    background-color: #ddd;
+    font-weight: bold; 
+    cursor: pointer; 
+}
+
 .right {
     text-align: right;
+}
+.query {
+    font-family: 'Courier New', Courier, monospace;
 }
 
 #loading {
@@ -491,6 +517,9 @@ tr.expanded td.author {
         background-color: #fefefe;
     }
 
+    #loading:after {
+        animation: none;
+    }
 }
 
 .prefix {
