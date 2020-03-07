@@ -261,6 +261,7 @@ fn main() {
     let index_mode_matches = matches.subcommand_matches("index");
     let query_mode_matches = matches.subcommand_matches("query");
     let facet_mode_matches = matches.subcommand_matches("facet");
+    let server_mode_matches = matches.subcommand_matches("server");
 
     let books_dir_required = query_mode_matches.is_none() && facet_mode_matches.is_none();
 
@@ -354,6 +355,10 @@ fn main() {
     //////////////////////SERVER MODE [default]
     else {
         app.load_genre_map();
+        let matches = match server_mode_matches {
+            Some(x) => x,
+            None => &matches,
+        };
         run_server(&matches, app).unwrap();
     }
 }
