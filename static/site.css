@@ -121,7 +121,7 @@ a.list:visited {
 tr:hover {
   background-color: lightyellow;
 }
-tr.appended {
+#result tr.appended {
     border-top: 3px dotted #222;
 }
 td {
@@ -216,14 +216,9 @@ tr.expanded td.author {
     max-height: 144px;
     cursor: pointer;
 }
-.action {
-    width: 96px;
-    max-width: 96px;
-    padding: 0;
-}
 .action a { 
     display: inline-block;
-    width: 100%;
+    width: 96px;
     text-align: center;
     text-decoration: none;
     color: #222;

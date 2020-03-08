@@ -263,7 +263,7 @@
                 }
                 var cover_url = v("cover") != "0" ? book_url + "/cover" : "";
                 var row_class = "list" + (append && tab=='' ? " appended" : "");
-                tab += '<tr class="' + row_class + '" data-row="' + r + '" data-cover="' + cover_url + '">'
+                tab += '<tr class="' + row_class + ' data-cover="' + cover_url + '">'
                     + '<td class="action gauge g' + size_pct + '" colspan="2"><a target="' + read_target + '" href="' + read_url + '">Читать</a></td>'
                     + '<td class="title">' + title + '</td>'
                     + '<td class="author">' + vale("author",", ") + '</td>'

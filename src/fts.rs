@@ -10,7 +10,9 @@ use tantivy::schema::*;
 use tantivy::tokenizer::*;
 use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, Searcher, TantivyError};
 
-const MAX_MATCHES_BEFORE_ORDERING: usize = 1000;
+use crate::sort::LocalString;
+
+const MAX_MATCHES_BEFORE_ORDERING: usize = 10000;
 const TOKENIZER_NAME: &'static str = "porcula";
 
 type Result<T> = tantivy::Result<T>;
@@ -414,8 +416,8 @@ impl BookReader {
         .iter()
         .filter_map(|n| schema.get_field(n))
         .collect();
-        let query_parser = QueryParser::for_index(&index, default_fields.clone());
-        //query_parser.set_conjunction_by_default();
+        let mut query_parser = QueryParser::for_index(&index, default_fields.clone());
+        query_parser.set_conjunction_by_default();
         Ok(BookReader {
             reader: reader,
             schema: schema,
@@ -453,7 +455,7 @@ impl BookReader {
                 matches.push(self.schema.to_json(&retrieved_doc));
             }
         } else {
-            //dummy sort: get some relevant docs and sort only them
+            //dummy sort: get top-N relevant docs, sort them and apply offset+limit
             let collector = &TopDocs::with_limit(MAX_MATCHES_BEFORE_ORDERING);
             let mut docs: Vec<Document> = searcher
                 .search(&query, collector)?
@@ -463,16 +465,20 @@ impl BookReader {
                 .collect();
             let mut offset = offset;
             match order {
-                "title" => docs
-                    .sort_by_cached_key(|d| first_text_value(&d, self.fields.title).to_lowercase()),
-                "author" => docs
-                    .sort_by_cached_key(|d| all_text_values(&d, self.fields.author).to_lowercase()),
-                "translator" => docs.sort_by_cached_key(|d| {
-                    all_text_values(&d, self.fields.translator).to_lowercase()
+                "title" => docs.sort_by_cached_key(|d| LocalString {
+                    v: first_text_value(&d, self.fields.title).to_string(),
+                }),
+                "author" => docs.sort_by_cached_key(|d| LocalString {
+                    v: all_text_values(&d, self.fields.author).to_lowercase(),
+                }),
+                "translator" => docs.sort_by_cached_key(|d| LocalString {
+                    v: all_text_values(&d, self.fields.translator).to_lowercase(),
                 }),
                 "sequence" => docs.sort_by_cached_key(|d| {
                     (
-                        first_text_value(&d, self.fields.sequence).to_lowercase(),
+                        LocalString {
+                            v: first_text_value(&d, self.fields.sequence).to_lowercase(),
+                        },
                         first_i64_value(&d, self.fields.seqnum),
                     )
                 }),
@@ -536,8 +542,13 @@ impl BookReader {
         Ok(None)
     }
 
-    pub fn get_facet(&self, path: &str, query: Option<&str>, hits: Option<usize>, debug: bool) -> Result<HashMap<String, u64>> 
-    {
+    pub fn get_facet(
+        &self,
+        path: &str,
+        query: Option<&str>,
+        hits: Option<usize>,
+        debug: bool,
+    ) -> Result<HashMap<String, u64>> {
         let searcher = self.reader.searcher();
         let mut facet_collector = FacetCollector::for_field(self.fields.facet);
         facet_collector.add_facet(path);

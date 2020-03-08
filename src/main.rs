@@ -21,6 +21,7 @@ mod fb2_parser;
 mod fts;
 mod genre_map;
 mod img_resizer;
+mod sort;
 mod types;
 #[macro_use]
 pub mod cmd;

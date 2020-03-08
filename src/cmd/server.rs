@@ -114,7 +114,7 @@ fn handler_facet(req: &Request, fts: &BookReader, debug: bool) -> Response {
     let req_query = req.get_param("query");
     let opt_query = match req_query {
         Some(ref s) if s != "" => Some(s.as_str()),
-        _ => None
+        _ => None,
     };
     match req.get_param("path") {
         Some(path) => match fts.get_facet(&path, opt_query, hits, debug) {
