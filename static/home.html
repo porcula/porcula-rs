@@ -86,6 +86,7 @@
         var size100pct = 5000000;
         var page = 0;
         var page_size = +(storage.getItem("page_size") || 20);
+        $("#page_size").val(page_size);
         var last_page = 0;
         var order = "default";
         var genre_translation = {};
