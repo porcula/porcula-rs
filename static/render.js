@@ -156,14 +156,14 @@ function closest_title_id() {
 function show_toc() {
     var id = closest_title_id();
     $(".toc").show();
-    $('.toc a').removeClass("current");
+    $('.toc li').removeClass("current");
     //highlight closest title
     if (id) {
         var a$ = $('.toc a[href="#' + id + '"]');
         var a = a$.get(0);
         if (a) {
             a.scrollIntoView({ "block": "center" });
-            a$.addClass("current");
+            a$.parent().addClass("current");
             var r = new Range();
             r.setStart(a, 0);
             r.setEnd(a, 0);

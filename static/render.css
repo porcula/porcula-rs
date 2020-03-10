@@ -95,6 +95,7 @@ p {
 }
 .goback:hover, .show_toc:hover {
     background-color: #e6ead6;
+    background-color: rgba(230,234,214,0.5);
 }
 .toc {
     position: fixed;
@@ -106,15 +107,21 @@ p {
     min-width: 30%;
     max-width: 70%;
     background-color: #ffd;
+    background-color: rgba(255,255,221,1);
     border: 2px solid #ddd;
     border-radius: 4px;
     font-size: 75%;
 }
 .toc a {
     text-decoration: none;
+    display: block;
 }
-.toc a.current {
-    background-color: #b8d3cb;
+.toc li.current {
+    list-style-type: "\25B6";
+}
+.toc li.current a {
+    color: #fafafa;
+    background-color: #333;
 }
 .toc .hide {
     position: fixed;

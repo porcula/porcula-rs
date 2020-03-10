@@ -4,7 +4,6 @@
     box-sizing: border-box; 
 }
 body {
-    width: 100vw;
     margin: auto;
     padding: 5px 5px 20px 5px;
     font: 12pt Arial;
