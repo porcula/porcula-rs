@@ -3,6 +3,7 @@ name = "porcula"
 version = "0.1.4"
 authors = ["alexey.s.v.br@gmail.com"]
 edition = "2018"
+publish = false
 
 [dependencies]
 zip = "0.5.5"
@@ -27,7 +28,7 @@ version = "0.17.2"
 features = ["encoding"]
 
 [dependencies.image]
-version = "0.23.0"
+version = "0.23.1"
 default-features = false
 features = ["jpeg","png","gif","bmp"]
 
