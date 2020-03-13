@@ -11,6 +11,7 @@ extern crate zip;
 extern crate rouille;
 #[macro_use]
 extern crate lazy_static;
+extern crate crossbeam_utils;
 
 use clap::{Arg, SubCommand};
 use std::collections::HashMap;
@@ -104,9 +105,9 @@ fn main() {
                         ]),
                 )
                 .arg(
-                    Arg::with_name("threads")
+                    Arg::with_name("index-threads")
                         .short("t")
-                        .long("threads")
+                        .long("index-threads")
                         .takes_value(true)
                         .value_name("number")
                         .default_value(tr!["all CPUs", "все CPU"])
@@ -114,6 +115,15 @@ fn main() {
                             "Number of indexing workers",
                             "Число потоков индексирования"
                         ]),
+                )
+                .arg(
+                    Arg::with_name("read-threads")
+                        .short("r")
+                        .long("read-threads")
+                        .takes_value(true)
+                        .value_name("number")
+                        .default_value("1")
+                        .help(tr!["Number of reading threads", "Число потоков чтения"]),
                 )
                 .arg(
                     Arg::with_name("heap-memory")
