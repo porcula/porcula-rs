@@ -11,6 +11,8 @@ use crate::cmd::*;
 use crate::fts::BookWriter;
 use crate::tr;
 
+const READ_BUFFER_SIZE: usize = 2*1024*1024;
+
 #[derive(Default)]
 struct ParsedFileStats {
     is_book: bool,
@@ -223,7 +225,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         time_to_unzip += zt.elapsed();
 
         //single-threaded zip decompressing chokes at ~60 MBps
-        //can reopen zip in multiple threads
+        //multiple threads may reopen zip as read different parts
         //assume even file size distribution
         let chunk_size = files_count / read_threads;
         let (stats_sender, stats_receiver) = channel();
@@ -244,7 +246,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                 let zipfile = zipfile.clone();
                 let stats_sender_clone = stats_sender.clone();
                 let reader = std::fs::File::open(&entry.path()).unwrap();
-                //let reader = std::io::BufReader::new(reader);
+                let reader = std::io::BufReader::with_capacity(READ_BUFFER_SIZE, reader);
                 let mut zip = zip::ZipArchive::new(reader).unwrap();
                 let book_writer_lock = book_writer_lock.clone();
                 scope.spawn(move |_| {
@@ -260,8 +262,8 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                         };
                         if debug {
                             println!(
-                                "{} [{}%] {}/{}",
-                                &tid, zip_progress_pct, &zipfile, &filename
+                                "[{}%] {} {}/{}",
+                                zip_progress_pct, &tid, &zipfile, &filename
                             );
                         }
                         let zt = Instant::now();
@@ -358,7 +360,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
     } else {
         println!("{}", tr!["Indexing done", "Индексация завершена"]);
     }
-    let total = tt.elapsed().as_millis();
+    let total = tt.elapsed().as_millis() + 1;
     println!(
         "{}: {}/{} = {}/{} MB",
         tr!["Archives", "Архивов"],
@@ -402,7 +404,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         let ue = time_to_unzip.as_millis();
         let pe = time_to_parse.as_millis();
         let ie = time_to_image.as_millis();
-        let total = ue + pe + ie;
+        let total = ue + pe + ie + 1;
         println!(
             "Reader threads: {} : unpacking {}%, parse {}%, image resize {}%",
             format_duration(total / (read_threads as u128)),

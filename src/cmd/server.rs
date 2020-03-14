@@ -6,6 +6,9 @@ use std::path::Path;
 use crate::cmd::*;
 use crate::tr;
 
+const CACHE_IMMUTABLE: u64 = 31536000;
+const CACHE_STATIC_ASSET: u64 = 86400;
+
 pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> {
     let fts = app.open_book_reader().unwrap_or_else(|e| {
         eprintln!("{}", e);
@@ -56,7 +59,7 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
         if let Some(filename) = maybe_file.next() {
             if let Some(asset) = assets::get(filename) {
                 let res =
-                    Response::from_data(asset.content_type, asset.content).with_public_cache(86400);
+                    Response::from_data(asset.content_type, asset.content).with_public_cache(CACHE_STATIC_ASSET);
                 return res;
             }
         }
@@ -78,7 +81,7 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
 
 fn handler_count(_req: &Request, fts: &BookReader) -> Response {
     match &fts.count_all() {
-        Ok(count) => Response::text(count.to_string()),
+        Ok(count) => Response::text(count.to_string()).with_no_cache(),
         Err(_) => Response::text("0".to_string()),
     }
 }
@@ -98,7 +101,7 @@ fn handler_search(req: &Request, fts: &BookReader, debug: bool) -> Response {
                 .unwrap_or(0);
             let order: String = req.get_param("order").unwrap_or(String::from("default"));
             match fts.search(&query, &order, limit, offset, debug) {
-                Ok(json) => Response::from_data("application/json", json),
+                Ok(json) => Response::from_data("application/json", json).with_no_cache(),
                 Err(e) => Response::text(e.to_string()).with_status_code(500),
             }
         }
@@ -118,7 +121,7 @@ fn handler_facet(req: &Request, fts: &BookReader, debug: bool) -> Response {
     };
     match req.get_param("path") {
         Some(path) => match fts.get_facet(&path, opt_query, hits, debug) {
-            Ok(ref data) => Response::json(data),
+            Ok(ref data) => Response::json(data).with_no_cache(),
             Err(e) => Response::text(e.to_string()).with_status_code(500),
         },
         None => Response::empty_404(),
@@ -127,7 +130,7 @@ fn handler_facet(req: &Request, fts: &BookReader, debug: bool) -> Response {
 
 fn handler_cover(_req: &Request, fts: &BookReader, zipfile: &str, filename: &str) -> Response {
     match fts.get_cover(zipfile, filename) {
-        Ok(Some(img)) if img.len() > 0 => Response::from_data("image/jpeg", img),
+        Ok(Some(img)) if img.len() > 0 => Response::from_data("image/jpeg", img).with_public_cache(CACHE_IMMUTABLE),
         _ => rouille::match_assets(
             &Request::fake_http("GET", DEFAULT_COVER_IMAGE, vec![], vec![]),
             DEFAULT_ASSETS_DIR,
@@ -174,7 +177,7 @@ fn handler_render(
                 start = found + substr.len();
             }
             html.extend_from_slice(buf[start..].as_bytes());
-            Response::from_data("text/html", html)
+            Response::from_data("text/html", html).with_public_cache(CACHE_IMMUTABLE)
         }
         None => Response::empty_404(),
     }
@@ -184,7 +187,7 @@ fn handler_file(_req: &Request, app: &Application, zipfile: &str, filename: &str
     match app.book_formats.get(&file_extension(filename).as_ref()) {
         Some(book_format) => {
             let content = read_zipped_file(&app.books_path, zipfile, filename);
-            Response::from_data(book_format.content_type(), content)
+            Response::from_data(book_format.content_type(), content).with_public_cache(CACHE_IMMUTABLE)
         }
         None => Response::empty_404(),
     }
