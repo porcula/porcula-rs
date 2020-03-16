@@ -11,6 +11,7 @@ extern crate zip;
 extern crate rouille;
 #[macro_use]
 extern crate lazy_static;
+extern crate deepsize;
 extern crate crossbeam_utils;
 
 use clap::{Arg, SubCommand};
@@ -28,8 +29,8 @@ mod types;
 pub mod cmd;
 
 use self::cmd::*;
-use genre_map::GenreMap;
-use types::*;
+use crate::genre_map::GenreMap;
+use crate::types::*;
 
 fn main() {
     std::env::set_var("RUST_BACKTRACE", "1"); //force backtrace in every environment
