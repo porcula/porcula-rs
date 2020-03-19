@@ -11,8 +11,8 @@ extern crate zip;
 extern crate rouille;
 #[macro_use]
 extern crate lazy_static;
-extern crate deepsize;
 extern crate crossbeam_utils;
+extern crate deepsize;
 
 use clap::{Arg, SubCommand};
 use std::collections::HashMap;
@@ -32,10 +32,9 @@ use self::cmd::*;
 use crate::genre_map::GenreMap;
 use crate::types::*;
 
-fn main() {
-    std::env::set_var("RUST_BACKTRACE", "1"); //force backtrace in every environment
-    let default_query_hits_str = DEFAULT_QUERY_HITS.to_string();
-    let matches = clap::App::new("Porcula")
+#[allow(clippy::cognitive_complexity)]
+fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
+    clap::App::new("Porcula")
         .version("0.1")
         .about(tr![
             "Full-text search on collection of e-books",
@@ -216,7 +215,7 @@ fn main() {
                 )
                 .arg(
                     Arg::with_name("hits")
-                        .default_value(&default_query_hits_str)
+                        .default_value(DEFAULT_QUERY_HITS_STR)
                         .short("h")
                         .long("hits")
                         .takes_value(true)
@@ -239,7 +238,7 @@ fn main() {
                 ]))
                 .arg(
                     Arg::with_name("hits")
-                        .default_value(&default_query_hits_str)
+                        .default_value(DEFAULT_QUERY_HITS_STR)
                         .short("h")
                         .long("hits")
                         .takes_value(true)
@@ -266,10 +265,14 @@ fn main() {
                         .help(tr!["Listen address", "Адрес сервера"]),
                 ),
         )
-        .get_matches();
+        .get_matches()
+}
+
+fn main() {
+    std::env::set_var("RUST_BACKTRACE", "1"); //force backtrace in every environment
+    let matches = cmd_line_matches();
 
     let debug = matches.is_present("debug");
-
     let index_mode_matches = matches.subcommand_matches("index");
     let query_mode_matches = matches.subcommand_matches("query");
     let facet_mode_matches = matches.subcommand_matches("facet");
@@ -346,12 +349,12 @@ fn main() {
     book_formats.insert(".fb2", Box::new(fb2_parser::FB2BookFormat {}));
 
     let mut app = Application {
-        books_path: books_path,
-        index_path: index_path,
-        book_formats: book_formats,
-        index_settings: index_settings,
+        books_path,
+        index_path,
+        book_formats,
+        index_settings,
         genre_map: GenreMap::default(), //defer load
-        debug: debug,
+        debug,
     };
 
     //////////////////////INDEXING MODE

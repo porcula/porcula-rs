@@ -18,21 +18,22 @@ use crate::fts::BookReader;
 use crate::genre_map::GenreMap;
 use crate::types::BookFormats;
 
-pub const INDEX_SETTINGS_FILE: &'static str = "porcula_index_settings.json";
-pub const DEFAULT_LANGUAGE: &'static str = "ru";
-pub const DEFAULT_INDEX_DIR: &'static str = "index";
-pub const DEFAULT_BOOKS_DIR: &'static str = "books";
-pub const DEFAULT_HEAP_SIZE_MB: &'static str = "100";
-pub const DEFAULT_BATCH_SIZE_MB: &'static str = "300";
-pub const DEFAULT_LISTEN_ADDR: &'static str = "127.0.0.1:8083";
+pub const INDEX_SETTINGS_FILE: &str = "porcula_index_settings.json";
+pub const DEFAULT_LANGUAGE: &str = "ru";
+pub const DEFAULT_INDEX_DIR: &str = "index";
+pub const DEFAULT_BOOKS_DIR: &str = "books";
+pub const DEFAULT_HEAP_SIZE_MB: &str = "100";
+pub const DEFAULT_BATCH_SIZE_MB: &str = "300";
+pub const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:8083";
+pub const DEFAULT_QUERY_HITS_STR: &str = "10";
 pub const DEFAULT_QUERY_HITS: usize = 10;
-pub const DEFAULT_BASE_URL: &'static str = "/porcula";
-pub const DEFAULT_ASSETS_DIR: &'static str = "static";
-pub const GENRE_MAP_FILENAME: &'static str = "genre-map.txt";
+pub const DEFAULT_BASE_URL: &str = "/porcula";
+pub const DEFAULT_ASSETS_DIR: &str = "static";
+pub const GENRE_MAP_FILENAME: &str = "genre-map.txt";
 
 pub const COVER_IMAGE_WIDTH: u32 = 96;
 pub const COVER_IMAGE_HEIGHT: u32 = 144;
-pub const DEFAULT_COVER_IMAGE: &'static str = "defcover.png";
+pub const DEFAULT_COVER_IMAGE: &str = "defcover.png";
 
 #[derive(Serialize, Deserialize)]
 pub struct IndexSettings {
@@ -55,7 +56,9 @@ pub struct Application {
 lazy_static! {
     pub static ref MESSAGE_LANG: String = {
         std::env::var("LC_MESSAGES")
-            .unwrap_or_else(|_| std::env::var("LANG").unwrap_or(DEFAULT_LANGUAGE.to_string()))
+            .unwrap_or_else(|_| {
+                std::env::var("LANG").unwrap_or_else(|_| DEFAULT_LANGUAGE.to_string())
+            })
             .chars()
             .take(2)
             .collect::<String>()
@@ -131,7 +134,7 @@ impl IndexSettings {
 impl Application {
     pub fn open_book_reader(&self) -> Result<BookReader, String> {
         assert!(
-            self.index_settings.langs.len() > 0,
+            !self.index_settings.langs.is_empty(),
             "{}",
             tr!["Empty language list", "Пустой список языков"],
         );

@@ -60,6 +60,7 @@ impl BookFormat for FB2BookFormat {
         "application/fb2"
     }
 
+    #[allow(clippy::cognitive_complexity, clippy::single_match)]
     fn parse(
         &self,
         zipfile: &str,
@@ -82,7 +83,7 @@ impl BookFormat for FB2BookFormat {
         let mut author = Vec::<Person>::new();
         let mut src_author = Vec::<Person>::new();
         let mut translator = Vec::<Person>::new();
-        let mut person = Person::new();
+        let mut person = Person::default();
         let mut genre = Vec::<String>::new();
         let mut keyword = Vec::<String>::new();
         let mut title = Vec::<String>::new();
@@ -216,8 +217,8 @@ impl BookFormat for FB2BookFormat {
                         }
                         b"image" => {
                             if let Some(v) = get_attr_string("href", &mut e.attributes(), &xml) {
-                                coverpage_href = v.trim_start_matches("#").to_string();
                                 // "#link" -> "link"
+                                coverpage_href = v.trim_start_matches('#').to_string();
                             }
                         }
                         _ => (),
@@ -307,7 +308,7 @@ impl BookFormat for FB2BookFormat {
                             }
                             _ => (),
                         }
-                        person = Person::new();
+                        person = Person::default();
                     }
                     _ => (),
                 },
@@ -323,7 +324,7 @@ impl BookFormat for FB2BookFormat {
                     Ok(Event::End(ref e)) if e.name() == b"translator" => {
                         mode = XMode::TitleInfo;
                         translator.push(person);
-                        person = Person::new();
+                        person = Person::default();
                     }
                     _ => (),
                 },
@@ -382,7 +383,7 @@ impl BookFormat for FB2BookFormat {
                             warning.push(warn)
                         }
                     }
-                    Err(e) => warning.push(e.to_string()),
+                    Err(e) => warning.push(e),
                 }
             }
         }
@@ -394,15 +395,12 @@ impl BookFormat for FB2BookFormat {
             return Err(ParserError::EmptyTitle);
         }
 
-        let length = body
-            .iter()
-            .map(|x| x.len() as u64)
-            .fold(0, |acc, x| acc + x); //total body length
+        let length = body.iter().map(|x| x.len() as u64).sum(); //total body length
 
         //fix common error: comma-delimited list of genres in one <genre> tag
         genre = genre
             .iter()
-            .flat_map(|c| c.split(","))
+            .flat_map(|c| c.split(','))
             .map(|c| c.trim())
             .filter(|c| !c.is_empty())
             .filter(|c| *c != "antique") //assigned by default
@@ -410,21 +408,21 @@ impl BookFormat for FB2BookFormat {
             .collect();
 
         Ok(Book {
-            id: id,
+            id,
             zipfile: zipfile.into(),
             filename: filename.into(),
             encoding: xml.encoding().name().to_string(),
-            length: length,
-            title: title,
-            lang: lang,
-            date: date,
-            genre: genre,
-            keyword: keyword,
-            author: author,
-            src_author: src_author,
-            translator: translator,
-            sequence: sequence,
-            seqnum: seqnum,
+            length,
+            title,
+            lang,
+            date,
+            genre,
+            keyword,
+            author,
+            src_author,
+            translator,
+            sequence,
+            seqnum,
             annotation: if with_annotation && !annotation.is_empty() {
                 Some(annotation.join(" "))
             } else {
@@ -435,11 +433,12 @@ impl BookFormat for FB2BookFormat {
             } else {
                 None
             },
-            cover_image: cover_image,
-            warning: warning,
+            cover_image,
+            warning,
         })
     }
 
+    #[allow(clippy::cognitive_complexity, clippy::single_match)]
     fn str_to_html(&self, decoded_xml: &str) -> RenderResult {
         let mut res = Vec::<Event>::new();
         let mut xml = quick_xml::Reader::from_str(decoded_xml);
@@ -486,7 +485,7 @@ impl BookFormat for FB2BookFormat {
                                     let id = id.value.to_vec();
                                     let ct = get_attr_raw(b"content-type", &mut e.attributes())
                                         .map(|a| a.value.to_vec())
-                                        .unwrap_or(b"".to_vec());
+                                        .unwrap_or_else(|| b"".to_vec());
                                     mode = XMode::Binary(Cow::Owned(id), Cow::Owned(ct));
                                 }
                             }
@@ -509,7 +508,7 @@ impl BookFormat for FB2BookFormat {
                         b"image" => {
                             if let Some(a) = get_attr_raw(b"href", &mut e.attributes()) {
                                 let mut href = a.value.to_vec();
-                                if href.len() > 0 && href[0] == b'#' {
+                                if !href.is_empty() && href[0] == b'#' {
                                     href.remove(0); // "#link" -> "link"
                                 }
                                 let attrs = vec![Attribute {
@@ -537,7 +536,7 @@ impl BookFormat for FB2BookFormat {
                                 //remove namespace from href="ns:xxx"
                                 if let Some(a) = get_attr_raw(b"href", &mut e.attributes()) {
                                     let mut href = a.value.to_vec();
-                                    if e.name() == b"image" && href.len() > 0 && href[0] == b'#' {
+                                    if e.name() == b"image" && !href.is_empty() && href[0] == b'#' {
                                         href.remove(0); // "#link" -> "link"
                                     }
                                     let attrs = vec![Attribute {
@@ -649,7 +648,7 @@ pub fn try_decode_base64(b64: &[u8]) -> Result<(Vec<u8>, String), String> {
     let mut b64_ref = b64;
     let config = base64::STANDARD.decode_allow_trailing_bits(true);
     //remove non-base64 chars
-    if let Some(_) = b64.iter().find(|&&x| is_base64(x)) {
+    if b64.iter().any(|&x| is_base64(x)) {
         buf = b64.iter().filter(|&&x| is_base64(x)).copied().collect();
         b64_ref = &buf[..];
     }

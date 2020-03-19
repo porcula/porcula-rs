@@ -2,7 +2,7 @@ use deepsize::DeepSizeOf;
 use std::collections::HashMap;
 use std::io::BufRead;
 
-#[derive(Debug, DeepSizeOf)]
+#[derive(Default, Debug, DeepSizeOf)]
 pub struct Person {
     pub first_name: Option<String>,
     pub middle_name: Option<String>,
@@ -72,8 +72,8 @@ pub type BookFormats = HashMap<&'static str, Box<dyn BookFormat + Send + Sync>>;
 
 use std::fmt::{Display, Formatter, Result};
 
-pub fn person_to_string(p: &Vec<Person>) -> String {
-    p.into_iter()
+pub fn person_to_string(p: &[Person]) -> String {
+    p.iter()
         .map(|x| x.to_string())
         .collect::<Vec<String>>()
         .join(", ")
@@ -114,32 +114,32 @@ impl std::fmt::Display for Person {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let mut r = "".to_string();
         if let Some(ref x) = self.last_name {
-            if x.len() > 0 {
-                if r.len() > 0 {
+            if !x.is_empty() {
+                if !r.is_empty() {
                     r.push(' ');
                 }
                 r.push_str(x);
             }
         }
         if let Some(ref x) = self.first_name {
-            if x.len() > 0 {
-                if r.len() > 0 {
+            if !x.is_empty() {
+                if !r.is_empty() {
                     r.push(' ');
                 }
                 r.push_str(x);
             }
         }
         if let Some(ref x) = self.middle_name {
-            if x.len() > 0 {
-                if r.len() > 0 {
+            if !x.is_empty() {
+                if !r.is_empty() {
                     r.push(' ');
                 }
                 r.push_str(x);
             }
         }
         if let Some(ref x) = self.nick_name {
-            if x.len() > 0 {
-                if r.len() > 0 {
+            if !x.is_empty() {
+                if !r.is_empty() {
                     r.push(' ');
                 }
                 r.push('[');
@@ -164,15 +164,6 @@ fn is_name_delimiter(x: char) -> bool {
 }
 
 impl Person {
-    pub fn new() -> Person {
-        Person {
-            first_name: None,
-            middle_name: None,
-            last_name: None,
-            nick_name: None,
-        }
-    }
-
     /// takes first word from last name, convert it to Proper-Case
     pub fn last_name_normalized(&self) -> Option<String> {
         if let Some(n) = &self.last_name {
@@ -180,13 +171,13 @@ impl Person {
                 .chars()
                 .take_while(|&x| x.is_alphabetic() || is_name_delimiter(x))
                 .collect(); //Name | Name-name
-            if name.len() > 0 {
+            if !name.is_empty() {
                 Some(
                     name.split('-')
-                        .filter(|x| x.len() > 0)
+                        .filter(|x| !x.is_empty())
                         .map(|x| {
                             let mut s = x.chars().take(1).collect::<String>().to_uppercase();
-                            s.extend(x.chars().skip(1).collect::<String>().to_lowercase().chars());
+                            s.push_str(&x.chars().skip(1).collect::<String>().to_lowercase());
                             s
                         })
                         .collect::<Vec<String>>()

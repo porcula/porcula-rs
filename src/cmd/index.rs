@@ -11,7 +11,7 @@ use crate::cmd::*;
 use crate::fts::BookWriter;
 use crate::tr;
 
-const READ_BUFFER_SIZE: usize = 2*1024*1024;
+const READ_BUFFER_SIZE: usize = 2 * 1024 * 1024;
 
 #[derive(Default)]
 struct ParsedFileStats {
@@ -28,6 +28,7 @@ struct ParsedFileStats {
     time_to_image: Duration,
 }
 
+#[allow(clippy::cognitive_complexity)]
 pub fn run_index(matches: &ArgMatches, app: &mut Application) {
     if matches.occurrences_of("language") > 0 {
         if let Some(v) = matches.values_of_lossy("language") {
@@ -35,7 +36,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         }
     }
     assert!(
-        app.index_settings.langs.len() > 0,
+        !app.index_settings.langs.is_empty(),
         "{} {}",
         tr![
             "No language specified nor on command line [--lang], nor in settings file",
@@ -52,8 +53,8 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         Some("full") => false,
         _ => true,
     };
-    for i in vec!["body", "annotation", "cover"] {
-        let s = i.to_string();
+    for i in &["body", "annotation", "cover"] {
+        let s = (*i).to_string();
         if matches.is_present(format!("with-{}", i)) {
             app.index_settings.disabled.remove(&s); //enabling field
         }
@@ -69,22 +70,14 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         .map(|x| x.parse::<usize>().unwrap_or(1))
         .unwrap_or(1);
     let heap_mb_str = matches.value_of("memory").unwrap_or(DEFAULT_HEAP_SIZE_MB);
-    let heap_size: usize = heap_mb_str.parse().expect(&format!(
-        "{} {}",
-        tr!["Invalid memory size", "Некорректный размер"],
-        heap_mb_str
-    ));
-    /*
-    let batch_size_str = matches
-        .value_of("batch-size")
-        .unwrap_or(DEFAULT_BATCH_SIZE_MB);
-    let mut batch_size: usize = batch_size_str.parse().expect(&format!(
-        "{} {}",
-        tr!["Invalid batch size", "Некорректное число"],
-        heap_mb_str
-    ));
-    batch_size = batch_size * 1024 * 1024; //MB -> bytes
-    */
+    let heap_size: usize = heap_mb_str.parse().unwrap_or_else(|_| {
+        eprintln!(
+            "{} {}",
+            tr!["Invalid memory size", "Некорректный размер"],
+            heap_mb_str
+        );
+        std::process::exit(4);
+    });
     app.load_genre_map();
     //open index
     let book_writer = crate::fts::BookWriter::new(
@@ -243,7 +236,6 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                     );
                 }
                 let canceled = canceled.clone();
-                let zipfile = zipfile.clone();
                 let stats_sender_clone = stats_sender.clone();
                 let reader = std::fs::File::open(&entry.path()).unwrap();
                 let reader = std::io::BufReader::with_capacity(READ_BUFFER_SIZE, reader);
@@ -443,6 +435,7 @@ fn is_zip_file(entry: &DirEntry) -> bool {
         && file_extension(entry.file_name().to_str().unwrap_or("")) == ".zip"
 }
 
+#[allow(clippy::too_many_arguments)]
 fn process_file<F>(
     zipfile: &str,
     filename: &str,
@@ -491,7 +484,7 @@ where
                 if debug {
                     println!("    -> {}", &b)
                 }
-                let lang = if b.lang.len() > 0 { &b.lang[0] } else { "" };
+                let lang = if !b.lang.is_empty() { &b.lang[0] } else { "" };
                 if lang_filter(&lang) {
                     if let Some(img) = b.cover_image {
                         let it = Instant::now();
