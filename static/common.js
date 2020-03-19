@@ -4,7 +4,7 @@
 }
 
 function is_ebook() {
-    return !!window.navigator.userAgent.match(/QtEmbedded|QtWebEngine/);
+    return !!window.navigator.userAgent.match(/QtEmbedded|QtWebEngine|PocketBook/);
 }
 
 if (!Math.trunc) { //polyfill for old eBooks

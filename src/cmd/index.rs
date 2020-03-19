@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use regex::Regex;
 
 use crate::cmd::*;
 use crate::fts::BookWriter;
@@ -104,6 +105,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         .disabled
         .contains(&"annotation".to_string());
     let with_cover = !app.index_settings.disabled.contains(&"cover".to_string());
+
     //exit nicely if user press Ctrl+C
     let canceled = Arc::new(AtomicBool::new(false));
     let c = canceled.clone();
@@ -145,7 +147,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         .map(|x| x.expect("invalid file"))
         .filter(is_zip_file)
         .collect();
-    zip_files.sort_by_key(|e| e.file_name());
+    zip_files.sort_by_key(|e| get_numeric_sort_key(e.file_name().to_str().unwrap_or_default()));
     let zip_count = zip_files.len();
     let zip_total_size = zip_files.iter().fold(0, |acc, entry| {
         acc + entry.metadata().map(|m| m.len()).unwrap_or(0)
@@ -407,6 +409,28 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
     }
 }
 
+
+// extract number from string and left-pad it
+lazy_static! {
+    static ref RE_NUMBER: Regex = {
+        Regex::new(r"[0-9]{2,9}").unwrap()
+    };
+}
+fn get_numeric_sort_key(filename: &str) -> String {
+    match RE_NUMBER.find(filename) {
+        Some(n) => format!("{:0>9}", n.as_str()),
+        None => filename.to_string()
+    }
+}
+
+#[test] 
+fn test_get_numeric_sort_key() {
+    assert_eq!(get_numeric_sort_key("ab123cd45ef"),"000000123");
+    let mut a = vec!["b","a", "c345","d12345","x001"];
+    a.sort_by_key(|x| get_numeric_sort_key(x));
+    assert_eq!(a, vec!["x001","c345","d12345","a","b"]);
+}
+
 fn format_duration(ms: u128) -> String {
     let mut s = ms / 1000;
     let h = s / 60 / 60;
@@ -549,3 +573,4 @@ where
     }
     stats
 }
+
