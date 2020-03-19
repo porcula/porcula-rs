@@ -13,7 +13,7 @@ use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, Searcher, TantivyEr
 use crate::sort::LocalString;
 
 const MAX_MATCHES_BEFORE_ORDERING: usize = 10000;
-const TOKENIZER_NAME: &'static str = "porcula";
+const TOKENIZER_NAME: &str = "porcula";
 
 type Result<T> = tantivy::Result<T>;
 
@@ -63,8 +63,7 @@ impl Fields {
         let stored_text_opts = TextOptions::default()
             .set_indexing_options(indexing_opts.clone())
             .set_stored();
-        let nonstored_text_opts =
-            TextOptions::default().set_indexing_options(indexing_opts.clone());
+        let nonstored_text_opts = TextOptions::default().set_indexing_options(indexing_opts);
         Fields {
             facet: schema_builder.add_facet_field("facet"),
             id: schema_builder.add_text_field("id", STORED | STRING),
@@ -79,80 +78,37 @@ impl Fields {
             translator: schema_builder.add_text_field("translator", stored_text_opts.clone()),
             sequence: schema_builder.add_text_field("sequence", stored_text_opts.clone()),
             seqnum: schema_builder.add_i64_field("seqnum", STORED),
-            annotation: schema_builder.add_text_field("annotation", stored_text_opts.clone()),
-            body: schema_builder.add_text_field("body", nonstored_text_opts.clone()),
+            annotation: schema_builder.add_text_field("annotation", stored_text_opts),
+            body: schema_builder.add_text_field("body", nonstored_text_opts),
             cover_image: schema_builder.add_bytes_field("cover_image"),
             cover: schema_builder.add_u64_field("cover", STORED),
         }
     }
 
     fn load(schema: &Schema) -> Result<Self> {
+        let load_field = |name: &str| {
+            schema
+                .get_field(name)
+                .ok_or_else(|| TantivyError::SchemaError(format!("field not found: {}", name)))
+        };
         Ok(Fields {
-            facet: schema.get_field("facet").ok_or(TantivyError::SchemaError(
-                "field not found: facet".to_string(),
-            ))?,
-            id: schema
-                .get_field("id")
-                .ok_or(TantivyError::SchemaError("field not found: id".to_string()))?,
-            encoding: schema
-                .get_field("encoding")
-                .ok_or(TantivyError::SchemaError(
-                    "field not found: encoding".to_string(),
-                ))?,
-            length: schema.get_field("length").ok_or(TantivyError::SchemaError(
-                "field not found: length".to_string(),
-            ))?,
-            lang: schema.get_field("lang").ok_or(TantivyError::SchemaError(
-                "field not found: lang".to_string(),
-            ))?,
-            keyword: schema
-                .get_field("keyword")
-                .ok_or(TantivyError::SchemaError(
-                    "field not found: keyword".to_string(),
-                ))?,
-            date: schema.get_field("date").ok_or(TantivyError::SchemaError(
-                "field not found: date".to_string(),
-            ))?,
-            title: schema.get_field("title").ok_or(TantivyError::SchemaError(
-                "field not found: title".to_string(),
-            ))?,
-            author: schema.get_field("author").ok_or(TantivyError::SchemaError(
-                "field not found: author".to_string(),
-            ))?,
-            src_author: schema
-                .get_field("src_author")
-                .ok_or(TantivyError::SchemaError(
-                    "field not found: src_author".to_string(),
-                ))?,
-            translator: schema
-                .get_field("translator")
-                .ok_or(TantivyError::SchemaError(
-                    "field not found: translator".to_string(),
-                ))?,
-            sequence: schema
-                .get_field("sequence")
-                .ok_or(TantivyError::SchemaError(
-                    "field not found: sequence".to_string(),
-                ))?,
-            seqnum: schema.get_field("seqnum").ok_or(TantivyError::SchemaError(
-                "field not found: seqnum".to_string(),
-            ))?,
-            annotation: schema
-                .get_field("annotation")
-                .ok_or(TantivyError::SchemaError(
-                    "field not found: annotation".to_string(),
-                ))?,
-            body: schema.get_field("body").ok_or(TantivyError::SchemaError(
-                "field not found: body".to_string(),
-            ))?,
-            cover_image: schema
-                .get_field("cover_image")
-                .ok_or(TantivyError::SchemaError(
-                    "field not found: cover_image".to_string(),
-                ))?,
-            cover: schema.get_field("cover").ok_or(TantivyError::SchemaError(
-                "field not found: cover".to_string(),
-            ))?,
+            facet: load_field("facet")?,
+            id: load_field("id")?,
+            encoding: load_field("encoding")?,
+            length: load_field("length")?,
+            lang: load_field("lang")?,
+            keyword: load_field("keyword")?,
+            date: load_field("date")?,
+            title: load_field("title")?,
+            author: load_field("author")?,
+            src_author: load_field("src_author")?,
+            translator: load_field("translator")?,
+            sequence: load_field("sequence")?,
+            seqnum: load_field("seqnum")?,
+            annotation: load_field("annotation")?,
+            body: load_field("body")?,
+            cover_image: load_field("cover_image")?,
+            cover: load_field("cover")?,
         })
     }
 }
@@ -162,7 +118,7 @@ fn file_facet(zipfile: &str, filename: &str) -> Facet {
     Facet::from_text(&path)
 }
 
-fn get_tokenizer<'a>(stemmer: &str) -> TextAnalyzer {
+fn get_tokenizer(stemmer: &str) -> TextAnalyzer {
     let language = match stemmer {
         "ar" => Language::Arabic,
         "da" => Language::Danish,
@@ -223,11 +179,11 @@ impl BookWriter {
         let reader = index.reader()?;
 
         Ok(BookWriter {
-            writer: writer,
-            index: index,
-            schema: schema,
-            reader: reader,
-            fields: fields,
+            writer,
+            index,
+            schema,
+            reader,
+            fields,
         })
     }
 
@@ -257,6 +213,7 @@ impl BookWriter {
         Ok(())
     }
 
+    #[allow(clippy::cognitive_complexity)]
     pub fn add_book(
         &mut self,
         book: crate::types::Book,
@@ -270,24 +227,24 @@ impl BookWriter {
             doc.add_text(self.fields.id, &id);
         }
         for i in &book.lang {
-            if i.len() > 0 {
+            if !i.is_empty() {
                 doc.add_text(self.fields.lang, &i)
             }
         }
         for i in &book.title {
-            if i.len() > 0 {
+            if !i.is_empty() {
                 doc.add_text(self.fields.title, &i)
             }
         }
         for i in &book.date {
-            if i.len() > 0 {
+            if !i.is_empty() {
                 doc.add_text(self.fields.date, &i)
             }
         }
         let mut genre_facet = vec![];
         let mut keyword = book.keyword.clone();
         for i in &book.genre {
-            if i.len() > 0 {
+            if !i.is_empty() {
                 genre_facet.push(format!("/genre/{}", genre_map.path_for(i)));
                 //if genre looks like word -> add it to keywords
                 if !i.contains('_') {
@@ -308,7 +265,7 @@ impl BookWriter {
         keyword.sort();
         keyword.dedup();
         for i in keyword {
-            if i.len() > 0 {
+            if !i.is_empty() {
                 let path = format!("/kw/{}", i);
                 doc.add_facet(self.fields.facet, &path);
                 doc.add_text(self.fields.keyword, &i);
@@ -316,7 +273,7 @@ impl BookWriter {
         }
         for i in &book.author {
             let t = &i.to_string();
-            if t.len() > 0 {
+            if !t.is_empty() {
                 doc.add_text(self.fields.author, &t);
                 if let Some(name) = &i.last_name_normalized() {
                     let first = name.chars().take(1).collect::<String>();
@@ -327,7 +284,7 @@ impl BookWriter {
         }
         for i in &book.src_author {
             let t = &i.to_string();
-            if t.len() > 0 {
+            if !t.is_empty() {
                 doc.add_text(self.fields.src_author, &t);
                 if let Some(name) = &i.last_name_normalized() {
                     let first = name.chars().next().unwrap_or('?');
@@ -338,7 +295,7 @@ impl BookWriter {
         }
         for i in &book.translator {
             let i = i.to_string();
-            if i.len() > 0 {
+            if !i.is_empty() {
                 doc.add_text(self.fields.translator, &i)
             }
         }
@@ -419,11 +376,11 @@ impl BookReader {
         let mut query_parser = QueryParser::for_index(&index, default_fields.clone());
         query_parser.set_conjunction_by_default();
         Ok(BookReader {
-            reader: reader,
-            schema: schema,
-            query_parser: query_parser,
-            fields: fields,
-            default_fields: default_fields,
+            reader,
+            schema,
+            query_parser,
+            fields,
+            default_fields,
         })
     }
 
@@ -510,7 +467,7 @@ impl BookReader {
         let facet_term = Term::from_facet(self.fields.facet, &file_facet(zipfile, filename));
         let query = TermQuery::new(facet_term, IndexRecordOption::Basic);
         let found = searcher.search(&query, &TopDocs::with_limit(1))?;
-        if found.len() > 0 {
+        if !found.is_empty() {
             Ok(Some(found[0].1))
         } else {
             Ok(None)
@@ -574,12 +531,12 @@ impl BookReader {
         //emulate wildcard queries (word* or word?) with regexes
         let mut words = vec![];
         let mut regexes = vec![];
-        let looks_like_match_all = Regex::new(r"^\*$").unwrap(); //  *
         let looks_like_regex = Regex::new(r"[.\])][*+?]").unwrap(); //  foo.* | foo[0-9]+ | (foo)?
         let looks_like_wildcard = Regex::new(r"[*?]").unwrap(); // foo* | fo?
-                                                                //TODO: phrase quoting, now just split query to words
+
+        //TODO: phrase quoting, now just split query to words
         for i in query.split_whitespace() {
-            if looks_like_match_all.is_match(i) {
+            if i == "*" {
                 words.push(i);
             } else if looks_like_regex.is_match(i) {
                 regexes.push(i.to_lowercase());
@@ -594,12 +551,13 @@ impl BookReader {
             println!("debug: words={:?} regexes={:?}", words, regexes);
         }
         let mut queries: Vec<(Occur, Box<dyn Query>)> = vec![];
-        if words.len() > 0 {
+        if !words.is_empty() {
             let std_query = words.join(" ");
             let q = self.query_parser.parse_query(&std_query)?;
-            if regexes.len() == 0 {
+            if regexes.is_empty() {
+                //regular query
                 return Ok(q);
-            } //regular query
+            }
             queries.push((Occur::Must, q));
         }
         let field_re = Regex::new("^([a-z]+):(.+)").unwrap();
@@ -616,7 +574,7 @@ impl BookReader {
             } else {
                 let mut subqueries: Vec<(Occur, Box<dyn Query>)> = vec![];
                 for field in self.default_fields.iter() {
-                    let q = RegexQuery::from_pattern(&i, field.clone())?; //don't want directly use tantivy_fst::Regex
+                    let q = RegexQuery::from_pattern(&i, *field)?; //don't want directly use tantivy_fst::Regex
                     subqueries.push((Occur::Should, Box::new(q)));
                 }
                 let q = BooleanQuery::from(subqueries);

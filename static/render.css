@@ -110,7 +110,8 @@ p {
     background-color: rgba(255,255,221,1);
     border: 2px solid #ddd;
     border-radius: 4px;
-    font-size: 75%;
+    font-size: 9pt;
+    line-height: 11pt;
 }
 .toc a {
     text-decoration: none;
@@ -135,7 +136,6 @@ p {
     cursor: pointer;
     background-color: #d88;
 }
-
 
 .find_words {
     position: sticky;

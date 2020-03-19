@@ -6,8 +6,8 @@ use std::path::Path;
 use crate::cmd::*;
 use crate::tr;
 
-const CACHE_IMMUTABLE: u64 = 31536000;
-const CACHE_STATIC_ASSET: u64 = 86400;
+const CACHE_IMMUTABLE: u64 = 31_536_000;
+const CACHE_STATIC_ASSET: u64 = 86_400;
 
 pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> {
     let fts = app.open_book_reader().unwrap_or_else(|e| {
@@ -36,6 +36,7 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
         &listen_addr
     );
 
+    #[allow(clippy::cognitive_complexity)]
     rouille::start_server(&listen_addr, move |req| {
         if app.debug {
             println!("req {}", req.raw_url())
@@ -58,8 +59,8 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
         let mut maybe_file = url.split('/').skip(1); //skip root /
         if let Some(filename) = maybe_file.next() {
             if let Some(asset) = assets::get(filename) {
-                let res =
-                    Response::from_data(asset.content_type, asset.content).with_public_cache(CACHE_STATIC_ASSET);
+                let res = Response::from_data(asset.content_type, asset.content)
+                    .with_public_cache(CACHE_STATIC_ASSET);
                 return res;
             }
         }
@@ -91,15 +92,17 @@ fn handler_search(req: &Request, fts: &BookReader, debug: bool) -> Response {
         Some(query) => {
             let limit: usize = req
                 .get_param("limit")
-                .unwrap_or(String::new())
+                .unwrap_or_default()
                 .parse()
                 .unwrap_or(DEFAULT_QUERY_HITS);
             let offset: usize = req
                 .get_param("offset")
-                .unwrap_or(String::new())
+                .unwrap_or_default()
                 .parse()
                 .unwrap_or(0);
-            let order: String = req.get_param("order").unwrap_or(String::from("default"));
+            let order: String = req
+                .get_param("order")
+                .unwrap_or_else(|| String::from("default"));
             match fts.search(&query, &order, limit, offset, debug) {
                 Ok(json) => Response::from_data("application/json", json).with_no_cache(),
                 Err(e) => Response::text(e.to_string()).with_status_code(500),
@@ -130,7 +133,9 @@ fn handler_facet(req: &Request, fts: &BookReader, debug: bool) -> Response {
 
 fn handler_cover(_req: &Request, fts: &BookReader, zipfile: &str, filename: &str) -> Response {
     match fts.get_cover(zipfile, filename) {
-        Ok(Some(img)) if img.len() > 0 => Response::from_data("image/jpeg", img).with_public_cache(CACHE_IMMUTABLE),
+        Ok(Some(img)) if !img.is_empty() => {
+            Response::from_data("image/jpeg", img).with_public_cache(CACHE_IMMUTABLE)
+        }
         _ => rouille::match_assets(
             &Request::fake_http("GET", DEFAULT_COVER_IMAGE, vec![], vec![]),
             DEFAULT_ASSETS_DIR,
@@ -187,7 +192,8 @@ fn handler_file(_req: &Request, app: &Application, zipfile: &str, filename: &str
     match app.book_formats.get(&file_extension(filename).as_ref()) {
         Some(book_format) => {
             let content = read_zipped_file(&app.books_path, zipfile, filename);
-            Response::from_data(book_format.content_type(), content).with_public_cache(CACHE_IMMUTABLE)
+            Response::from_data(book_format.content_type(), content)
+                .with_public_cache(CACHE_IMMUTABLE)
         }
         None => Response::empty_404(),
     }

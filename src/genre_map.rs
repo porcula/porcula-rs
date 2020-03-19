@@ -31,7 +31,7 @@ impl GenreMap {
                             category = code.to_string();
                             tr.insert(category.clone(), desc.to_string());
                         } else {
-                            let mut codes = code.split("+");
+                            let mut codes = code.split('+');
                             //first code is primary
                             if let Some(primary) = codes.next() {
                                 pc.insert(primary.to_string(), category.clone());
@@ -80,7 +80,7 @@ impl GenreMap {
     pub fn translate<'a>(&'a self, code: &str) -> String {
         let code = self.normalize(code);
         match self.translation.get(code.as_str()) {
-            Some(ref t) => t.to_string(),
+            Some(ref t) => (*t).to_string(),
             None => code,
         }
     }
