@@ -72,6 +72,26 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
             SubCommand::with_name("index")
                 .about(tr!["Index/reindex books", "Индексация книг"])
                 .arg(
+                    Arg::with_name("INDEX-MODE")
+                        .required(true)
+                        .index(1)
+                        .possible_values(&["full", "delta"])
+                        .default_value("delta")
+                        .help(tr![
+                            "Index mode: full or incremental",
+                            "Режим индексирования: полный или добавление"
+                        ]),
+                )
+                .arg(
+                    Arg::with_name("file")
+                        .short("f")
+                        .long("file")
+                        .takes_value(true)
+                        .required(false)
+                        .multiple(true)
+                        .help(tr!["Archive file name to reindex", "Имя отдельного архива для переиндексации"]),
+                )
+                .arg(
                     Arg::with_name("language")
                         .short("l")
                         .long("lang")
@@ -92,17 +112,6 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         .value_name(tr!["language code | OFF", "код языка | OFF"])
                         .default_value(DEFAULT_LANGUAGE)
                         .help(tr!["Word stemmer", "Алгоритм определения основы слова"]),
-                )
-                .arg(
-                    Arg::with_name("INDEX-MODE")
-                        .required(true)
-                        .index(1)
-                        .possible_values(&["full", "delta"])
-                        .default_value("delta")
-                        .help(tr![
-                            "Index mode: full or incremental",
-                            "Режим индексирования: полный или добавление"
-                        ]),
                 )
                 .arg(
                     Arg::with_name("index-threads")
@@ -133,18 +142,6 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         .takes_value(true)
                         .value_name("MB")
                         .help(tr!["Heap memory size", "Размер памяти"]),
-                )
-                .arg(
-                    Arg::with_name("batch-size")
-                        .short("b")
-                        .long("batch-size")
-                        .takes_value(true)
-                        .value_name("MB")
-                        .default_value(DEFAULT_BATCH_SIZE_MB)
-                        .help(tr![
-                            "Commit after each N-th megabytes",
-                            "Сохранение каждых N мегабайт"
-                        ]),
                 )
                 .arg(
                     Arg::with_name("with-body")

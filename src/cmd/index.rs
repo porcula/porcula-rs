@@ -29,6 +29,18 @@ struct ParsedFileStats {
     time_to_image: Duration,
 }
 
+#[derive(Clone)]
+struct ParseOpts<'a> {
+    book_formats: &'a BookFormats,
+    genre_map: &'a GenreMap,
+    debug: bool,
+    delta: bool,
+    body: bool,
+    annotation: bool,
+    cover: bool,
+}
+
+
 #[allow(clippy::cognitive_complexity)]
 pub fn run_index(matches: &ArgMatches, app: &mut Application) {
     if matches.occurrences_of("language") > 0 {
@@ -45,6 +57,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         ],
         INDEX_SETTINGS_FILE
     );
+    let files: Vec<&std::ffi::OsStr> = matches.values_of_os("file").unwrap_or_default().collect();
     if matches.occurrences_of("stemmer") > 0 {
         if let Some(v) = matches.value_of("stemmer") {
             app.index_settings.stemmer = v.to_string();
@@ -99,12 +112,18 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         }
     }
     let lang_filter = |lang: &str| any_lang || lang_set.contains(&lang);
-    let with_body = !app.index_settings.disabled.contains(&"body".to_string());
-    let with_annotation = !app
-        .index_settings
-        .disabled
-        .contains(&"annotation".to_string());
-    let with_cover = !app.index_settings.disabled.contains(&"cover".to_string());
+    let opts = ParseOpts {
+        book_formats: &app.book_formats,
+        genre_map: &app.genre_map,
+        debug: app.debug,
+        delta,
+        body: !app.index_settings.disabled.contains(&"body".to_string()),
+        annotation: !app
+            .index_settings
+            .disabled
+            .contains(&"annotation".to_string()),
+        cover: !app.index_settings.disabled.contains(&"cover".to_string())
+    };
 
     //exit nicely if user press Ctrl+C
     let canceled = Arc::new(AtomicBool::new(false));
@@ -119,10 +138,10 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         "----{}----\ndir={} delta={} lang={:?} stemmer={} body={} annotation={} cover={} files={:?}",
         tr!["START INDEXING","НАЧИНАЕМ ИНДЕКСАЦИЮ"],
         &app.books_path.display(),
-        delta,
+        opts.delta,
         &lang_set,
         &app.index_settings.stemmer,
-        with_body, with_annotation, with_cover,
+        opts.body, opts.annotation, opts.cover,
         app.book_formats.keys()
     );
     if app.debug {
@@ -146,6 +165,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         .expect("directory not readable")
         .map(|x| x.expect("invalid file"))
         .filter(is_zip_file)
+        .filter(|x| files.is_empty() || files.contains(&x.file_name().as_os_str()))
         .collect();
     zip_files.sort_by_key(|e| get_numeric_sort_key(e.file_name().to_str().unwrap_or_default()));
     let zip_count = zip_files.len();
@@ -175,10 +195,6 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         book_writer.delete_all_books().unwrap();
     }
 
-    let debug = app.debug;
-    let book_formats = &app.book_formats;
-    let genre_map = &app.genre_map;
-
     for entry in zip_files {
         if canceled.load(Ordering::SeqCst) {
             break;
@@ -187,7 +203,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         let zip_size = entry.metadata().map(|m| m.len()).unwrap_or(0);
         let zip_progress_pct = zip_progress_size * 100 / zip_total_size;
         let zipfile = &os_filename.to_str().expect("invalid filename");
-        if delta {
+        if delta && files.is_empty() {
             let book_writer_lock = book_writer_lock.clone();
             let book_writer = book_writer_lock.lock().unwrap();
             if let Ok(true) = book_writer.is_book_indexed(&zipfile, "WHOLE") {
@@ -219,19 +235,24 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         };
         time_to_unzip += zt.elapsed();
 
+        //assume large zip-file with many books inside, 1-3 MB each
         //single-threaded zip decompressing chokes at ~60 MBps
-        //multiple threads may reopen zip as read different parts
-        //assume even file size distribution
+        //reopen zip and read different parts in multiple threads
         let chunk_size = files_count / read_threads;
         let (stats_sender, stats_receiver) = channel();
         let mut first_file_num = 0;
         let mut last_file_num = chunk_size;
+        let mut opts = opts.clone();
+        //enforce reindex of books inside specified archive
+        if !files.is_empty() {
+            opts.delta = false;
+        }
         thread::scope(|scope| {
             for reader_id in 0..read_threads {
                 if (reader_id + 1) == read_threads {
                     last_file_num = files_count
                 }
-                if debug {
+                if opts.debug {
                     println!(
                         "reader#{} batch: {}..{}",
                         reader_id, first_file_num, last_file_num
@@ -243,6 +264,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                 let reader = std::io::BufReader::with_capacity(READ_BUFFER_SIZE, reader);
                 let mut zip = zip::ZipArchive::new(reader).unwrap();
                 let book_writer_lock = book_writer_lock.clone();
+                let opts = opts.clone();
                 scope.spawn(move |_| {
                     let tid = format!("{:?}", std::thread::current().id());
                     for i in first_file_num..last_file_num {
@@ -254,7 +276,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                             Some(s) => s,
                             None => file.name().into(),
                         };
-                        if debug {
+                        if opts.debug {
                             println!(
                                 "[{}%] {} {}/{}",
                                 zip_progress_pct, &tid, &zipfile, &filename
@@ -272,14 +294,8 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                                     &filename,
                                     data.as_ref(),
                                     book_writer_lock,
-                                    book_formats,
-                                    genre_map,
                                     lang_filter,
-                                    debug,
-                                    delta,
-                                    with_body,
-                                    with_annotation,
-                                    with_cover,
+                                    &opts,
                                 );
                                 stats.time_to_unzip = ze;
                                 stats_sender_clone.send(stats).unwrap();
@@ -335,13 +351,13 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
             .add_file_record(&zipfile, "WHOLE", book_indexed)
             .unwrap_or(()); //mark whole archive as indexed
         if need_commit {
-            if debug {
+            if opts.debug {
                 println!("Commit: start");
             }
             let ct = Instant::now();
             book_writer.commit().unwrap();
             time_to_commit += ct.elapsed();
-            if app.debug {
+            if opts.debug {
                 println!("Commit: done");
             }
         }
@@ -459,30 +475,23 @@ fn is_zip_file(entry: &DirEntry) -> bool {
         && file_extension(entry.file_name().to_str().unwrap_or("")) == ".zip"
 }
 
-#[allow(clippy::too_many_arguments)]
 fn process_file<F>(
     zipfile: &str,
     filename: &str,
     data: &[u8],
     book_writer_lock: Arc<Mutex<BookWriter>>,
-    book_formats: &BookFormats,
-    genre_map: &GenreMap,
     lang_filter: F,
-    debug: bool,
-    delta: bool,
-    with_body: bool,
-    with_annotation: bool,
-    with_cover: bool,
+    opts: &ParseOpts,
 ) -> ParsedFileStats
 where
     F: Fn(&str) -> bool,
 {
     let mut stats = ParsedFileStats::default();
     let ext = file_extension(&filename);
-    if let Some(book_format) = book_formats.get(&ext.as_ref()) {
+    if let Some(book_format) = opts.book_formats.get(&ext.as_ref()) {
         //filter eBook by extension
         stats.is_book = true;
-        if delta {
+        if opts.delta {
             let book_writer = book_writer_lock.lock().unwrap();
             if let Ok(true) = book_writer.is_book_indexed(&zipfile, &filename) {
                 println!("  {} {}", &filename, tr!["indexed", "индексирован"]);
@@ -497,15 +506,15 @@ where
             &zipfile,
             &filename,
             &mut buf_file,
-            with_body,
-            with_annotation,
-            with_cover,
+            opts.body,
+            opts.annotation,
+            opts.cover,
         );
         stats.time_to_parse = pt.elapsed();
         match parsed_book {
             Ok(mut b) => {
                 stats.warning_count += b.warning.len();
-                if debug {
+                if opts.debug {
                     println!("    -> {}", &b)
                 }
                 let lang = if !b.lang.is_empty() { &b.lang[0] } else { "" };
@@ -534,12 +543,12 @@ where
                     }
 
                     stats.parsed_size = b.size_of(); //metadata + plain text + cover image
-                    if !with_body {
+                    if !opts.body {
                         b.length = stats.parsed_size as u64;
                     }
 
                     let mut book_writer = book_writer_lock.lock().unwrap();
-                    match book_writer.add_book(b, &genre_map) {
+                    match book_writer.add_book(b, opts.genre_map) {
                         Ok(_) => stats.indexed = true,
                         Err(e) => eprintln!(
                             "{}/{} -> {} {}",
