@@ -111,7 +111,8 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
             any_lang = true
         }
     }
-    let lang_filter = |lang: &str| any_lang || lang_set.contains(&lang);
+    //index books with `undefined` language too
+    let lang_filter = |lang: &str| any_lang || lang_set.contains(&lang) || lang.is_empty();
     let opts = ParseOpts {
         book_formats: &app.book_formats,
         genre_map: &app.genre_map,
