@@ -1,12 +1,12 @@
 use clap::ArgMatches;
 use crossbeam_utils::thread;
+use regex::Regex;
 use std::collections::HashSet;
 use std::fs::DirEntry;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use regex::Regex;
 
 use crate::cmd::*;
 use crate::fts::BookWriter;
@@ -39,7 +39,6 @@ struct ParseOpts<'a> {
     annotation: bool,
     cover: bool,
 }
-
 
 #[allow(clippy::cognitive_complexity)]
 pub fn run_index(matches: &ArgMatches, app: &mut Application) {
@@ -123,7 +122,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
             .index_settings
             .disabled
             .contains(&"annotation".to_string()),
-        cover: !app.index_settings.disabled.contains(&"cover".to_string())
+        cover: !app.index_settings.disabled.contains(&"cover".to_string()),
     };
 
     //exit nicely if user press Ctrl+C
@@ -426,26 +425,23 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
     }
 }
 
-
 // extract number from string and left-pad it
 lazy_static! {
-    static ref RE_NUMBER: Regex = {
-        Regex::new(r"[0-9]{2,9}").unwrap()
-    };
+    static ref RE_NUMBER: Regex = { Regex::new(r"[0-9]{2,9}").unwrap() };
 }
 fn get_numeric_sort_key(filename: &str) -> String {
     match RE_NUMBER.find(filename) {
         Some(n) => format!("{:0>9}", n.as_str()),
-        None => filename.to_string()
+        None => filename.to_string(),
     }
 }
 
-#[test] 
+#[test]
 fn test_get_numeric_sort_key() {
-    assert_eq!(get_numeric_sort_key("ab123cd45ef"),"000000123");
-    let mut a = vec!["b","a", "c345","d12345","x001"];
+    assert_eq!(get_numeric_sort_key("ab123cd45ef"), "000000123");
+    let mut a = vec!["b", "a", "c345", "d12345", "x001"];
     a.sort_by_key(|x| get_numeric_sort_key(x));
-    assert_eq!(a, vec!["x001","c345","d12345","a","b"]);
+    assert_eq!(a, vec!["x001", "c345", "d12345", "a", "b"]);
 }
 
 fn format_duration(ms: u128) -> String {
@@ -583,4 +579,3 @@ where
     }
     stats
 }
-

@@ -89,7 +89,10 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         .takes_value(true)
                         .required(false)
                         .multiple(true)
-                        .help(tr!["Archive file name to reindex", "Имя отдельного архива для переиндексации"]),
+                        .help(tr![
+                            "Archive file name to reindex",
+                            "Имя отдельного архива для переиндексации"
+                        ]),
                 )
                 .arg(
                     Arg::with_name("language")
