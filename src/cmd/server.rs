@@ -2,6 +2,7 @@ use clap::ArgMatches;
 use rouille::{Request, Response};
 use std::io::prelude::*;
 use std::path::Path;
+use std::str;
 
 use crate::cmd::*;
 use crate::tr;
@@ -163,25 +164,35 @@ fn handler_render(
                 .decode(&content, encoding::DecoderTrap::Ignore)
                 .unwrap();
             let content = book_format.str_to_html(&utf8).unwrap(); //result is Vec<u8> but valid UTF-8
-            let template = Path::new(DEFAULT_ASSETS_DIR).join("render.html");
-            let mut f = std::fs::File::open(template).unwrap();
-            let mut buf = String::new();
-            f.read_to_string(&mut buf).unwrap();
-            let mut html: Vec<u8> = vec![];
+            const TEMPLATE: &str = "render.html";
+            const TEMPLATE_SIZE: usize = 1000; //approximate
+            let template = Path::new(DEFAULT_ASSETS_DIR).join(TEMPLATE);
+            let mut html = Vec::<u8>::with_capacity(content.len() + TEMPLATE_SIZE);
+            let mut buf: String = String::new();
+            //read template from static file or load internal asset
+            let tmpl: &str = if let Ok(mut f) = std::fs::File::open(template) {
+                f.read_to_string(&mut buf).unwrap();
+                &buf
+            } else {
+                let raw = assets::get(TEMPLATE)
+                    .expect("render template not found")
+                    .content;
+                str::from_utf8(raw).unwrap()
+            };
             let mut start = 0;
             let substr = "{title}";
-            if let Some(found) = buf.find(substr) {
-                html.extend_from_slice(buf[start..found].as_bytes());
+            if let Some(found) = tmpl.find(substr) {
+                html.extend_from_slice(tmpl[start..found].as_bytes());
                 html.extend_from_slice(title.as_bytes());
                 start = found + substr.len();
             }
             let substr = "{content}";
-            if let Some(found) = buf.find(substr) {
-                html.extend_from_slice(buf[start..found].as_bytes());
+            if let Some(found) = tmpl.find(substr) {
+                html.extend_from_slice(tmpl[start..found].as_bytes());
                 html.extend_from_slice(&content);
                 start = found + substr.len();
             }
-            html.extend_from_slice(buf[start..].as_bytes());
+            html.extend_from_slice(tmpl[start..].as_bytes());
             Response::from_data("text/html", html).with_public_cache(CACHE_IMMUTABLE)
         }
         None => Response::empty_404(),
