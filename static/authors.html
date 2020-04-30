@@ -91,7 +91,7 @@
                     var pct = Math.trunc((1 * v) / max * 100 / 5) * 5;
                     if (pct > 100) pct = 100;
                     var cls = 'bk' + pct;
-                    var url = 'home.html?query='+encodeURIComponent('facet:"'+path+'"');
+                    var url = 'home.html?query='+encodeURIComponent('facet:"' + path + '" ' + query);
                     html += '<tr class="row"><td class="author gauge g'+pct+'"><a class="tdlink" href="'+url+'">'+esc(n)+'</a></td><td class="right">'+v+'</td></tr>';
                 }
                 $("#list tbody").html(html);

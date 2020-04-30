@@ -66,7 +66,7 @@
                     var v = facet[path].v;
                     var pct = Math.trunc((1 * v) / max * 100 / 5) * 5;
                     if (pct > 100) pct = 100;
-                    var url = 'home.html?query='+ encodeURIComponent('facet:"' + path + '"');
+                    var url = 'home.html?query='+ encodeURIComponent('facet:"' + path + '" ' + query);
                     tab += '<tr class="row" data-id="'+id+'" data-path="'+path+'"><td class="node collapsed">+</td><td class="L1"><a href="'+url+'" class="tdlink">' 
                         + esc(t) + '</a></td><td class="v gauge g' + pct + '">' + v + '</td></tr>';
                     id += 1;
@@ -145,7 +145,7 @@
                     if (pct > 100) pct = 100;
                     var url = 'home.html?query=';
                     for (var j in path_arr) {
-                        url += encodeURIComponent('facet:"' + path_arr[j] + '" ');
+                        url += encodeURIComponent('facet:"' + path_arr[j] + '" ' + query);
                     }
                     tab += '<tr class="row child of'+parent_id+'"><td></td><td class="L2"><a href="'+url+'" class="tdlink">' 
                         + esc(t) + '</a></td><td class="v gauge g' + pct + '">' + v + '</td></tr>';
