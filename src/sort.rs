@@ -47,22 +47,22 @@ impl Ord for LocalStr<'_> {
         } else if !a1 && !b1 {
             return self.v.cmp(&other.v);
         }
-        for i in ai.zip(bi) {
-            if i.0 == i.1 {
+        for (a,b) in ai.zip(bi) {
+            if a == b {
                 continue;
             }
-            let ac = ORDER.get(&i.0);
-            let bc = ORDER.get(&i.1);
-            if let Some(a) = ac {
-                if let Some(b) = bc {
-                    return a.cmp(&b);
+            let ac = ORDER.get(&a);
+            let bc = ORDER.get(&b);
+            if let Some(a2) = ac {
+                if let Some(b2) = bc {
+                    return a2.cmp(&b2);
                 } else {
                     return Ordering::Less;
                 }
             } else if bc.is_some() {
                 return Ordering::Greater;
             }
-            return i.0.cmp(&i.1);
+            return a.cmp(&b);
         }
         self.v.cmp(&other.v)
     }

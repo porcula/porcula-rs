@@ -440,12 +440,15 @@ impl BookFormat for FB2BookFormat {
 
     #[allow(clippy::cognitive_complexity, clippy::single_match)]
     fn str_to_html(&self, decoded_xml: &str) -> RenderResult {
+        let mut writer = quick_xml::Writer::new(std::io::Cursor::new(Vec::new()));
         let mut res = Vec::<Event>::new();
         let mut xml = quick_xml::Reader::from_str(decoded_xml);
         xml.expand_empty_elements(true); //for compatibility with HTML4 <tag/> -> <tag></tag>
         let mut buf = Vec::new();
         let mut mode = XMode::Start;
         let mut img = HashMap::<Cow<[u8]>, (Cow<[u8]>, Cow<[u8]>)>::new(); //image-id -> (content-type,base64-data)
+        let mut description_start: usize = 0;
+        let mut description_end: usize = 0;
 
         //phase 1: collect XML events from [ title-info (annotation+cover), bodies, binaries ]
         //doing mapping to HTML tags
@@ -479,6 +482,7 @@ impl BookFormat for FB2BookFormat {
                                 res.push(tag);
                                 mode = XMode::Body(ParentNode::Start);
                             }
+                            b"description" => description_start = xml.buffer_position(),
                             b"title-info" => mode = XMode::TitleInfo,
                             b"binary" => {
                                 if let Some(id) = get_attr_raw(b"id", &mut e.attributes()) {
@@ -491,7 +495,13 @@ impl BookFormat for FB2BookFormat {
                             }
                             _ => (),
                         }
-                    }
+                    },
+                    Ok(Event::End(ref e)) => {
+                        match e.name() {
+                            b"description" => description_end = xml.buffer_position(),
+                            _ => ()
+                        }
+                    },
                     _ => (),
                 },
                 XMode::Binary(ref id, ref ct) => match event {
@@ -597,18 +607,68 @@ impl BookFormat for FB2BookFormat {
             buf.clear();
         }
 
-        //phase 2: construct HTML, inline image content
-        let mut writer = quick_xml::Writer::new(std::io::Cursor::new(Vec::new()));
+        //phase 2: parse <description> tag again, construct HTML tree with all technical information ("book imprint")
+        // <tag aaa="bbb">xxx</tag> -> <div><span class="name">tag</span><span class="value">aaa=bbb xxx</span><div>
+        let attrs = vec![Attribute {
+            key: b"class",
+            value: Cow::Borrowed(b"description"),
+        }];
+        res.push(Event::Start(BytesStart::owned_name("div").with_attributes(attrs)));
+        let mut xml = quick_xml::Reader::from_str(&decoded_xml[description_start..description_end]);
+        xml.expand_empty_elements(true);
+        loop {
+            let event = xml.read_event(&mut buf);
+            match event {
+                Err(_) => (), //ignore xml error
+                Ok(Event::Eof) => break,
+                Ok(Event::Start(ref e)) => {
+                    res.push(Event::Start(BytesStart::owned_name("div")));
+                    let attrs = vec![Attribute {
+                        key: b"class",
+                        value: Cow::Borrowed(b"name"),
+                    }];
+                    res.push(Event::Start(BytesStart::owned_name("span").with_attributes(attrs)));
+                    res.push(Event::Text(BytesText::from_escaped(e.name().to_vec())));
+                    res.push(Event::End(BytesEnd::borrowed(b"span")));
+                    let attrs = vec![Attribute {
+                        key: b"class",
+                        value: Cow::Borrowed(b"value"),
+                    }];
+                    res.push(Event::Start(BytesStart::owned_name("span").with_attributes(attrs)));
+                    for attr in e.attributes() {
+                        if let Ok(a) = attr {
+                            let mut txt: Vec<u8> = vec![];
+                            txt.extend_from_slice(a.key);
+                            txt.extend_from_slice(b"=");
+                            txt.extend_from_slice(&*a.value);
+                            txt.extend_from_slice(b" ");
+                            res.push(Event::Text(BytesText::from_escaped(txt)));
+                        }
+                    }
+                },
+                Ok(Event::Text(_)) => res.push(event.unwrap().into_owned()),
+                Ok(Event::End(_)) => {
+                    res.push(Event::End(BytesEnd::borrowed(b"span")));
+                    res.push(Event::End(BytesEnd::borrowed(b"div")));
+                },
+                _ => (),
+            }
+            buf.clear();
+        }    
+        res.push(Event::End(BytesEnd::borrowed(b"div"))); //</description>
+
+
+        //phase 3: construct HTML, inline image content
         for event in res {
             match event {
                 Event::Start(ref e) => {
                     if e.name() == b"image" {
                         if let Some(href) = get_attr_raw(b"href", &mut e.attributes()) {
-                            if let Some(i) = img.get(&href.value) {
+                            if let Some((ct,data)) = img.get(&href.value) {
                                 let mut src = b"data:".to_vec();
-                                src.extend_from_slice(&*i.0); //content-type
+                                src.extend_from_slice(&*ct); //content-type
                                 src.extend_from_slice(b" ;base64, ");
-                                src.extend_from_slice(&*i.1); //image data
+                                src.extend_from_slice(&*data); //image data
                                 let mut attrs = vec![];
                                 attrs.push(Attribute {
                                     key: b"src",

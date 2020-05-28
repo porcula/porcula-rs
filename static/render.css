@@ -167,3 +167,17 @@ p {
     color: #2c2c2c;
     text-decoration: none;
 }
+
+.description {
+    font-size: 8pt;
+    color:  #333333;
+    background-color: #e2e3d0;
+    line-height: 8pt;
+    padding: 2ex 1ex 2ex 1ex;
+}
+.description div { 
+    margin-left: 2em; 
+}
+.description span {
+    margin-right: 1em;
+}
