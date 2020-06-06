@@ -47,7 +47,7 @@ impl Ord for LocalStr<'_> {
         } else if !a1 && !b1 {
             return self.v.cmp(&other.v);
         }
-        for (a,b) in ai.zip(bi) {
+        for (a, b) in ai.zip(bi) {
             if a == b {
                 continue;
             }

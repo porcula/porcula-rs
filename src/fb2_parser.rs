@@ -182,25 +182,35 @@ impl BookFormat for FB2BookFormat {
                     _ => (),
                 },
                 XMode::TitleInfo => match event {
-                    Ok(Event::Start(ref e)) => match e.name() {
-                        b"author" => mode = XMode::Author(ParentNode::TitleInfo),
-                        b"translator" => mode = XMode::Translator,
-                        b"annotation" => {
-                            if with_annotation {
-                                mode = XMode::Annotation(ParentNode::TitleInfo);
-                            } else {
-                                xml.read_to_end(b"annotation", &mut buf)
-                                    .unwrap_or_else(|e| {
-                                        warning.push(format!(
-                                            "Error at position {}: {:?}",
-                                            &xml.buffer_position(),
-                                            e
-                                        ))
-                                    });
+                    Ok(Event::Start(ref e)) => {
+                        tag = e.name().to_vec();
+                        match e.name() {
+                            b"author" => mode = XMode::Author(ParentNode::TitleInfo),
+                            b"translator" => mode = XMode::Translator,
+                            b"annotation" => {
+                                if with_annotation {
+                                    mode = XMode::Annotation(ParentNode::TitleInfo);
+                                } else {
+                                    xml.read_to_end(b"annotation", &mut buf)
+                                        .unwrap_or_else(|e| {
+                                            warning.push(format!(
+                                                "Error at position {}: {:?}",
+                                                &xml.buffer_position(),
+                                                e
+                                            ))
+                                        });
+                                }
                             }
+                            b"date" => {
+                                tag = e.name().to_vec();
+                                if let Some(a) = get_attr_string("value", &mut e.attributes(), &xml)
+                                {
+                                    date.push(a);
+                                }
+                            }
+                            _ => (),
                         }
-                        _ => tag = e.name().to_vec(),
-                    },
+                    }
                     Ok(Event::Empty(ref e)) => match e.name() {
                         b"sequence" => {
                             let mut attrs = e.attributes();
@@ -261,10 +271,19 @@ impl BookFormat for FB2BookFormat {
                     _ => (),
                 },
                 XMode::SrcTitleInfo => match event {
-                    Ok(Event::Start(ref e)) => match e.name() {
-                        b"author" => mode = XMode::Author(ParentNode::SrcTitleInfo),
-                        _ => tag = e.name().to_vec(),
-                    },
+                    Ok(Event::Start(ref e)) => {
+                        tag = e.name().to_vec();
+                        match e.name() {
+                            b"author" => mode = XMode::Author(ParentNode::SrcTitleInfo),
+                            b"date" => {
+                                if let Some(a) = get_attr_string("value", &mut e.attributes(), &xml)
+                                {
+                                    date.push(a);
+                                }
+                            }
+                            _ => (),
+                        }
+                    }
                     Ok(Event::Text(e)) => match tag.as_slice() {
                         //single field for translation / source
                         b"book-title" => {
@@ -329,7 +348,18 @@ impl BookFormat for FB2BookFormat {
                     _ => (),
                 },
                 XMode::DocInfo => match event {
-                    Ok(Event::Start(ref e)) => tag = e.name().to_vec(),
+                    Ok(Event::Start(ref e)) => {
+                        tag = e.name().to_vec();
+                        match tag.as_slice() {
+                            b"date" => {
+                                if let Some(a) = get_attr_string("value", &mut e.attributes(), &xml)
+                                {
+                                    date.push(a);
+                                }
+                            }
+                            _ => (),
+                        }
+                    }
                     Ok(Event::Text(e)) => match tag.as_slice() {
                         b"id" => {
                             if let Ok(v) = e.unescape_and_decode(&xml) {
@@ -495,12 +525,10 @@ impl BookFormat for FB2BookFormat {
                             }
                             _ => (),
                         }
-                    },
-                    Ok(Event::End(ref e)) => {
-                        match e.name() {
-                            b"description" => description_end = xml.buffer_position(),
-                            _ => ()
-                        }
+                    }
+                    Ok(Event::End(ref e)) => match e.name() {
+                        b"description" => description_end = xml.buffer_position(),
+                        _ => (),
                     },
                     _ => (),
                 },
@@ -613,7 +641,9 @@ impl BookFormat for FB2BookFormat {
             key: b"class",
             value: Cow::Borrowed(b"description"),
         }];
-        res.push(Event::Start(BytesStart::owned_name("div").with_attributes(attrs)));
+        res.push(Event::Start(
+            BytesStart::owned_name("div").with_attributes(attrs),
+        ));
         let mut xml = quick_xml::Reader::from_str(&decoded_xml[description_start..description_end]);
         xml.expand_empty_elements(true);
         loop {
@@ -627,14 +657,18 @@ impl BookFormat for FB2BookFormat {
                         key: b"class",
                         value: Cow::Borrowed(b"name"),
                     }];
-                    res.push(Event::Start(BytesStart::owned_name("span").with_attributes(attrs)));
+                    res.push(Event::Start(
+                        BytesStart::owned_name("span").with_attributes(attrs),
+                    ));
                     res.push(Event::Text(BytesText::from_escaped(e.name().to_vec())));
                     res.push(Event::End(BytesEnd::borrowed(b"span")));
                     let attrs = vec![Attribute {
                         key: b"class",
                         value: Cow::Borrowed(b"value"),
                     }];
-                    res.push(Event::Start(BytesStart::owned_name("span").with_attributes(attrs)));
+                    res.push(Event::Start(
+                        BytesStart::owned_name("span").with_attributes(attrs),
+                    ));
                     for attr in e.attributes() {
                         if let Ok(a) = attr {
                             let mut txt: Vec<u8> = vec![];
@@ -645,18 +679,17 @@ impl BookFormat for FB2BookFormat {
                             res.push(Event::Text(BytesText::from_escaped(txt)));
                         }
                     }
-                },
+                }
                 Ok(Event::Text(_)) => res.push(event.unwrap().into_owned()),
                 Ok(Event::End(_)) => {
                     res.push(Event::End(BytesEnd::borrowed(b"span")));
                     res.push(Event::End(BytesEnd::borrowed(b"div")));
-                },
+                }
                 _ => (),
             }
             buf.clear();
-        }    
+        }
         res.push(Event::End(BytesEnd::borrowed(b"div"))); //</description>
-
 
         //phase 3: construct HTML, inline image content
         for event in res {
@@ -664,7 +697,7 @@ impl BookFormat for FB2BookFormat {
                 Event::Start(ref e) => {
                     if e.name() == b"image" {
                         if let Some(href) = get_attr_raw(b"href", &mut e.attributes()) {
-                            if let Some((ct,data)) = img.get(&href.value) {
+                            if let Some((ct, data)) = img.get(&href.value) {
                                 let mut src = b"data:".to_vec();
                                 src.extend_from_slice(&*ct); //content-type
                                 src.extend_from_slice(b" ;base64, ");

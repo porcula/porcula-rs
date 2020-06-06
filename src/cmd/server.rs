@@ -76,7 +76,7 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
             (GET) (/book/{zipfile: String}/{filename: String}) => { handler_file(&req, &app, &zipfile, &filename) },
             (GET) (/book/{zipfile: String}/{filename: String}/{_saveas: String}) => { handler_file(&req, &app, &zipfile, &filename) },
             (GET) (/opensearch) => { handler_opensearch_xml(&req) },
-            _ => { Response::empty_404() },
+            _ =>  Response::empty_404() ,
         )
     });
 }

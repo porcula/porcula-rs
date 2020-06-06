@@ -427,7 +427,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
 
 // extract number from string and left-pad it
 lazy_static! {
-    static ref RE_NUMBER: Regex = { Regex::new(r"[0-9]{2,9}").unwrap() };
+    static ref RE_NUMBER: Regex = Regex::new(r"[0-9]{2,9}").unwrap();
 }
 fn get_numeric_sort_key(filename: &str) -> String {
     match RE_NUMBER.find(filename) {
