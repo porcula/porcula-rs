@@ -339,7 +339,7 @@
         }
 
         $("#result").on("click", "td.author", function (e) {
-            var v = $(this).text().replace('""','');
+            var v = $(this).text().replaceAll('"','');
             if (!v) return;
             $("#query").val((e.ctrlKey ? $("#query").val() + " " : "") + 'author:"' + v + '"');
             order = "title";
@@ -348,7 +348,7 @@
         });
 
         $("#result").on("click", "td.sequence", function (e) {
-            var v = $(this).text().replace('""','');
+            var v = $(this).text().replaceAll('"','');
             if (!v) return;
             $("#query").val((e.ctrlKey ? $("#query").val() + " " : "") + 'sequence:"' + v + '"');
             order = "sequence";
