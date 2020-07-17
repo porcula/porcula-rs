@@ -339,14 +339,18 @@
         }
 
         $("#result").on("click", "td.author", function (e) {
-            $("#query").val((e.ctrlKey ? $("#query").val() + " " : "") + 'author:"' + $(this).text() + '"');
+            var v = $(this).text().replace('""','');
+            if (!v) return;
+            $("#query").val((e.ctrlKey ? $("#query").val() + " " : "") + 'author:"' + v + '"');
             order = "title";
             page = 0;
             search(false);
         });
 
         $("#result").on("click", "td.sequence", function (e) {
-            $("#query").val((e.ctrlKey ? $("#query").val() + " " : "") + 'sequence:"' + $(this).text() + '"');
+            var v = $(this).text().replace('""','');
+            if (!v) return;
+            $("#query").val((e.ctrlKey ? $("#query").val() + " " : "") + 'sequence:"' + v + '"');
             order = "sequence";
             page = 0;
             search(false);
