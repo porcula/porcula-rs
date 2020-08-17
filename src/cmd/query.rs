@@ -19,7 +19,7 @@ pub fn run_query(matches: &ArgMatches, app: &Application) {
             );
             std::process::exit(4);
         });
-        match fts.search(&query, "default", hits, 0, app.debug) {
+        match fts.search_as_json(&query, "default", hits, 0, app.debug) {
             Ok(res) => {
                 println!("{}", res);
             }

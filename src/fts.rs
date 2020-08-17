@@ -38,6 +38,23 @@ struct Fields {
     cover: Field,
 }
 
+#[derive(Debug)]
+pub struct BookMeta {
+    pub zipfile: String,
+    pub filename: String,
+    pub length: u64,
+    pub title: String,
+    pub lang: String,
+    pub date: Option<String>,
+    pub genre: Vec<String>,
+    pub keyword: Vec<String>,
+    pub author: Vec<String>,
+    pub translator: Vec<String>,
+    pub sequence: Option<String>,
+    pub seqnum: Option<i64>,
+    pub annotation: Option<String>,
+}
+
 #[allow(dead_code)]
 pub struct BookWriter {
     schema: Schema,
@@ -328,24 +345,51 @@ impl BookWriter {
     }
 }
 
-fn first_text_value(doc: &Document, field: Field) -> &str {
+fn first_string_def(doc: &Document, field: Field, default: &str) -> String {
+    match doc.get_first(field) {
+        Some(x) => match x.text() {
+            Some(s) => s.to_string(),
+            None => default.to_string(),
+        },
+        None => default.to_string(),
+    }
+}
+
+fn first_string(doc: &Document, field: Field) -> Option<String> {
+    match doc.get_first(field) {
+        Some(x) => x.text().map(|s| s.to_string()),
+        None => None,
+    }
+}
+
+fn first_str(doc: &Document, field: Field) -> &str {
     doc.get_first(field)
         .map(|x| x.text().unwrap_or(""))
         .unwrap_or("")
 }
 
-fn all_text_values(doc: &Document, field: Field) -> String {
-    let v: Vec<&str> = doc
-        .get_all(field)
-        .iter()
-        .map(|x| x.text().unwrap_or(""))
-        .collect();
+fn joined_values(doc: &Document, field: Field) -> String {
+    let v: Vec<&str> = doc.get_all(field).iter().filter_map(|x| x.text()).collect();
     v.join(", ")
+}
+
+fn vec_string(doc: &Document, field: Field) -> Vec<String> {
+    doc.get_all(field)
+        .iter()
+        .filter_map(|x| x.text())
+        .map(|s| s.to_string())
+        .collect()
 }
 
 fn first_i64_value(doc: &Document, field: Field) -> i64 {
     doc.get_first(field)
         .map(|x| if let Value::I64(i) = x { *i } else { 0 })
+        .unwrap_or(0)
+}
+
+fn first_u64_value(doc: &Document, field: Field) -> u64 {
+    doc.get_first(field)
+        .map(|x| if let Value::U64(i) = x { *i } else { 0 })
         .unwrap_or(0)
 }
 
@@ -390,7 +434,68 @@ impl BookReader {
         Ok(cnt)
     }
 
-    pub fn search(
+    pub fn search_as_docs(
+        &self,
+        query: &dyn Query,
+        order: &str,
+        limit: usize,
+        offset: usize,
+        debug: bool,
+    ) -> Result<Vec<Document>> {
+        let searcher = self.reader.searcher();
+        if debug {
+            println!("debug: query={:?} order={}", query, order);
+        }
+        let mut docs = Vec::new();
+        if order == "default" {
+            let top_docs = searcher.search(query, &TopDocs::with_limit(limit + offset))?;
+            for (_score, doc_address) in top_docs.iter().skip(offset) {
+                let retrieved_doc = searcher.doc(*doc_address)?;
+                docs.push(retrieved_doc);
+            }
+        } else {
+            //dummy sort: get top-N relevant docs, sort them and apply offset+limit
+            let collector = &TopDocs::with_limit(MAX_MATCHES_BEFORE_ORDERING);
+            let mut all_docs: Vec<Document> = searcher
+                .search(query, collector)?
+                .iter()
+                .map(|(_score, doc_address)| searcher.doc(*doc_address))
+                .filter_map(|x| x.ok())
+                .collect();
+            let mut offset = offset;
+            match order {
+                "title" => all_docs.sort_by_cached_key(|d| LocalString {
+                    v: first_str(&d, self.fields.title).to_string(),
+                }),
+                "author" => all_docs.sort_by_cached_key(|d| LocalString {
+                    v: joined_values(&d, self.fields.author).to_lowercase(),
+                }),
+                "translator" => all_docs.sort_by_cached_key(|d| LocalString {
+                    v: joined_values(&d, self.fields.translator).to_lowercase(),
+                }),
+                "sequence" => all_docs.sort_by_cached_key(|d| {
+                    (
+                        LocalString {
+                            v: first_str(&d, self.fields.sequence).to_lowercase(),
+                        },
+                        first_i64_value(&d, self.fields.seqnum),
+                    )
+                }),
+                "random" => {
+                    let mut rnd = rand::thread_rng();
+                    all_docs.sort_by_cached_key(|_| rnd.gen::<i64>());
+                    offset = 0;
+                }
+                x => return Err(tantivy::TantivyError::InvalidArgument(x.to_string())),
+            }
+            for doc in all_docs.into_iter().skip(offset).take(limit) {
+                docs.push(doc);
+            }
+        }
+        Ok(docs)
+    }
+
+    pub fn search_as_json(
         &self,
         query: &str,
         order: &str,
@@ -398,64 +503,71 @@ impl BookReader {
         offset: usize,
         debug: bool,
     ) -> Result<String> {
-        //->JSON
-        let searcher = self.reader.searcher();
         let query = self.parse_query(query, debug)?;
-        if debug {
-            println!("debug: query={:?}", &query)
-        }
-        let mut matches = Vec::<String>::new();
-        if order == "default" {
-            let top_docs = searcher.search(&query, &TopDocs::with_limit(limit + offset))?;
-            for (_score, doc_address) in top_docs.iter().skip(offset) {
-                let retrieved_doc = searcher.doc(*doc_address)?;
-                matches.push(self.schema.to_json(&retrieved_doc));
-            }
-        } else {
-            //dummy sort: get top-N relevant docs, sort them and apply offset+limit
-            let collector = &TopDocs::with_limit(MAX_MATCHES_BEFORE_ORDERING);
-            let mut docs: Vec<Document> = searcher
-                .search(&query, collector)?
-                .iter()
-                .map(|(_score, doc_address)| searcher.doc(*doc_address))
-                .filter_map(|x| x.ok())
-                .collect();
-            let mut offset = offset;
-            match order {
-                "title" => docs.sort_by_cached_key(|d| LocalString {
-                    v: first_text_value(&d, self.fields.title).to_string(),
-                }),
-                "author" => docs.sort_by_cached_key(|d| LocalString {
-                    v: all_text_values(&d, self.fields.author).to_lowercase(),
-                }),
-                "translator" => docs.sort_by_cached_key(|d| LocalString {
-                    v: all_text_values(&d, self.fields.translator).to_lowercase(),
-                }),
-                "sequence" => docs.sort_by_cached_key(|d| {
-                    (
-                        LocalString {
-                            v: first_text_value(&d, self.fields.sequence).to_lowercase(),
-                        },
-                        first_i64_value(&d, self.fields.seqnum),
-                    )
-                }),
-                "random" => {
-                    let mut rnd = rand::thread_rng();
-                    docs.sort_by_cached_key(|_| rnd.gen::<i64>());
-                    offset = 0;
-                }
-                x => return Err(tantivy::TantivyError::InvalidArgument(x.to_string())),
-            }
-            for doc in docs.iter().skip(offset).take(limit) {
-                matches.push(self.schema.to_json(&doc));
-            }
-        }
-        let total = searcher.search(&query, &Count)?;
+        let docs = self.search_as_docs(&query, order, limit, offset, debug)?;
+        let matches: Vec<String> = docs.iter().map(|doc| self.schema.to_json(doc)).collect();
+        let total = self.reader.searcher().search(&query, &Count)?;
         Ok(format!(
             "{{\"total\":{},\"matches\":[{}]}}",
             total,
             matches.join(",\n")
         ))
+    }
+
+    pub fn search_as_meta(
+        &self,
+        query: &str,
+        order: &str,
+        limit: usize,
+        offset: usize,
+        debug: bool,
+    ) -> Result<Vec<BookMeta>> {
+        let query = self.parse_query(query, debug)?;
+        let docs = self.search_as_docs(&query, order, limit, offset, debug)?;
+        let mut matches = Vec::new();
+        for doc in docs {
+            let mut zipfile = "".to_string();
+            let mut filename = "".to_string();
+            let mut genre = Vec::new();
+            for i in doc.get_all(self.fields.facet) {
+                if let Value::Facet(f) = i {
+                    let mut path = f.to_path().into_iter();
+                    let p0 = path.next();
+                    let p1 = path.next();
+                    let p2 = path.next();
+                    match p0 {
+                        Some("file") => {
+                            zipfile = p1.map(|x| x.to_owned()).unwrap_or_default();
+                            filename = p2.map(|x| x.to_owned()).unwrap_or_default();
+                        }
+                        Some("genre") => {
+                            if let Some(x) = p2 {
+                                genre.push(x.to_owned())
+                            }
+                        } //skip level 1: "/genre/sf/sf_horror" -> "sf_horror"
+                        _ => (),
+                    }
+                }
+            }
+
+            let seqnum = first_i64_value(&doc, self.fields.seqnum);
+            matches.push(BookMeta {
+                zipfile,
+                filename,
+                length: first_u64_value(&doc, self.fields.length),
+                title: first_string_def(&doc, self.fields.title, ""),
+                lang: first_string_def(&doc, self.fields.lang, ""),
+                date: first_string(&doc, self.fields.date),
+                genre,
+                keyword: vec_string(&doc, self.fields.keyword),
+                author: vec_string(&doc, self.fields.author),
+                translator: vec_string(&doc, self.fields.translator),
+                sequence: first_string(&doc, self.fields.sequence),
+                seqnum: if seqnum != 0 { Some(seqnum) } else { None },
+                annotation: first_string(&doc, self.fields.annotation),
+            });
+        }
+        Ok(matches)
     }
 
     fn find_book(
@@ -492,8 +604,8 @@ impl BookReader {
         let searcher = self.reader.searcher();
         if let Some(doc_address) = self.find_book(&searcher, &zipfile, &filename)? {
             let doc = searcher.doc(doc_address)?;
-            let title: &str = first_text_value(&doc, self.fields.title);
-            let encoding: &str = first_text_value(&doc, self.fields.encoding);
+            let title: &str = first_str(&doc, self.fields.title);
+            let encoding: &str = first_str(&doc, self.fields.encoding);
             return Ok(Some((title.to_string(), encoding.to_string())));
         }
         Ok(None)

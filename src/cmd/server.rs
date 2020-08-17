@@ -1,10 +1,16 @@
+use atom_syndication::{
+    Category, ContentBuilder, Entry, EntryBuilder, FeedBuilder, LinkBuilder, Person,
+};
 use clap::ArgMatches;
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use rouille::{Request, Response};
+use std::collections::HashMap;
 use std::io::prelude::*;
 use std::path::Path;
 use std::str;
 
 use crate::cmd::*;
+use crate::sort::LocalString;
 use crate::tr;
 
 const CACHE_IMMUTABLE: u64 = 31_536_000;
@@ -32,7 +38,7 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
         &app.index_settings.langs
     );
     println!(
-        "{}: http://{}/home.html",
+        "{}: http://{}/porcula/home.html",
         tr!["Application", "Приложение"],
         &listen_addr
     );
@@ -76,9 +82,50 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
             (GET) (/book/{zipfile: String}/{filename: String}) => { handler_file(&req, &app, &zipfile, &filename) },
             (GET) (/book/{zipfile: String}/{filename: String}/{_saveas: String}) => { handler_file(&req, &app, &zipfile, &filename) },
             (GET) (/opensearch) => { handler_opensearch_xml(&req) },
+            (GET) (/opds) => { opds_root(&req, &fts) },
+            (GET) (/opds/search/{query: String}) => { opds_search_where(&req, &query) },
+            (GET) (/opds/search/{query: String}/) => { opds_search_where(&req, &query) },
+            (GET) (/opds/search/{field: String}/{query: String}) => {
+                let query = format!("{}:{}", field, query);
+                opds_search_books(&req, &query, "default", &app.genre_map.translation, &fts)
+            },
+            (GET) (/opds/author) => { opds_facet(&req, "author", None, "Авторы", None, &fts) },
+            (GET) (/opds/author/{prefix: String}) => { opds_facet(&req, "author", Some(&prefix), "Авторы", None, &fts) },
+            (GET) (/opds/author/{prefix: String}/{name: String}) => {
+                let query = format!("facet:/author/{}/{}", prefix, name);
+                opds_search_books(&req, &query, "title", &app.genre_map.translation, &fts)
+            },
+            (GET) (/opds/genre) => { opds_facet(&req, "genre", None, "Жанры", Some(&app.genre_map.translation), &fts) },
+            (GET) (/opds/genre/{prefix: String}) => { opds_facet(&req, "genre", Some(&prefix), "Жанры", Some(&app.genre_map.translation), &fts) },
+            (GET) (/opds/genre/{cat: String}/{code: String}) => {
+                let query = format!("facet:/genre/{}/{}", cat, code);
+                opds_search_books(&req, &query, "title", &app.genre_map.translation, &fts)
+            },
             _ =>  Response::empty_404() ,
         )
     });
+}
+
+fn urlenc(s: &str) -> String {
+    utf8_percent_encode(s, NON_ALPHANUMERIC).to_string()
+}
+
+fn root_url(req: &Request) -> String {
+    let host = match req.header("X-Forwarded-Host") {
+        Some(s) => s,
+        None => req.header("Host").expect("Unknown server host"),
+    };
+    let proto = match req.header("X-Forwarded-Proto") {
+        Some(s) => s,
+        None => {
+            if req.is_secure() {
+                "https"
+            } else {
+                "http"
+            }
+        }
+    };
+    format!("{}://{}", proto, host)
 }
 
 fn handler_count(_req: &Request, fts: &BookReader) -> Response {
@@ -104,7 +151,7 @@ fn handler_search(req: &Request, fts: &BookReader, debug: bool) -> Response {
             let order: String = req
                 .get_param("order")
                 .unwrap_or_else(|| String::from("default"));
-            match fts.search(&query, &order, limit, offset, debug) {
+            match fts.search_as_json(&query, &order, limit, offset, debug) {
                 Ok(json) => Response::from_data("application/json", json).with_no_cache(),
                 Err(e) => Response::text(e.to_string()).with_status_code(500),
             }
@@ -211,31 +258,17 @@ fn handler_file(_req: &Request, app: &Application, zipfile: &str, filename: &str
 }
 
 fn handler_opensearch_xml(req: &Request) -> Response {
-    let host = match req.header("X-Forwarded-Host") {
-        Some(s) => s,
-        None => req.header("Host").expect("Unknown server host"),
-    };
-    let proto = match req.header("X-Forwarded-Proto") {
-        Some(s) => s,
-        None => {
-            if req.is_secure() {
-                "https"
-            } else {
-                "http"
-            }
-        }
-    };
     let content = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
     <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
       <ShortName>Porcula</ShortName>
       <Description>Library search</Description>
-      <Url type="text/html" template="{}://{}/porcula/home.html?query={{searchTerms}}"/>  
+      <Url type="text/html" template="{}/porcula/home.html?query={{searchTerms}}"/>  
       <Language>ru-RU</Language>
       <OutputEncoding>UTF-8</OutputEncoding>
       <InputEncoding>UTF-8</InputEncoding>
     </OpenSearchDescription>"#,
-        proto, host
+        root_url(req)
     );
     Response::from_data("application/xml", content)
 }
@@ -249,4 +282,384 @@ pub fn read_zipped_file(books_path: &Path, zipfile: &str, filename: &str) -> Vec
     let mut content = vec![];
     file.read_to_end(&mut content).unwrap();
     content
+}
+
+fn atom_mime_type() -> Option<String> {
+    Some("application/atom+xml".to_string())
+}
+fn atom_nav_mime_type() -> Option<String> {
+    Some("application/atom+xml;profile=opds-catalog;kind=navigation".to_string())
+}
+
+fn opds_response(title: &str, root: &str, path: &str, entries: Vec<Entry>) -> Response {
+    let abs_url = format!("{}/porcula{}", root, path);
+    let mut ns = HashMap::<String, String>::new();
+    ns.insert("dcterms".into(), "http://purl.org/dc/terms".into());
+
+    let mut links = Vec::new();
+
+    links.push(
+        LinkBuilder::default()
+            .href(&abs_url)
+            .rel("self")
+            .mime_type(atom_nav_mime_type())
+            .build()
+            .unwrap(),
+    );
+    links.push(
+        LinkBuilder::default()
+            .href("/porcula/opds")
+            .rel("start")
+            .mime_type(atom_nav_mime_type())
+            .build()
+            .unwrap(),
+    );
+    links.push(
+        LinkBuilder::default()
+            .href("/porcula/opds/search/{searchTerms}")
+            .rel("search")
+            .mime_type(atom_mime_type())
+            .build()
+            .unwrap(),
+    );
+
+    let f = FeedBuilder::default()
+        .title(title)
+        .subtitle(Some("Porcula library OPDS catalog".into()))
+        .id(abs_url)
+        .icon(Some("favicon.ico".into()))
+        .namespaces(ns)
+        .updated(chrono::Utc::now())
+        .links(links)
+        .entries(entries)
+        .build()
+        .unwrap();
+    Response::from_data("application/xml", f.to_string())
+}
+
+fn opds_root(req: &Request, fts: &BookReader) -> Response {
+    let root_url = root_url(req);
+    let req_path = req.url();
+    let book_count = match fts.count_all() {
+        Ok(c) => c,
+        Err(_) => 0,
+    };
+    let mut e = Vec::new();
+
+    let mut links = Vec::new();
+    links.push(
+        LinkBuilder::default()
+            .href(format!("{}/porcula/opds/author", root_url))
+            .rel("alternate")
+            .build()
+            .unwrap(),
+    );
+    links.push(
+        LinkBuilder::default()
+            .href("/porcula/opds/author")
+            .rel("subsection")
+            .mime_type(atom_nav_mime_type())
+            .build()
+            .unwrap(),
+    );
+
+    e.push(
+        EntryBuilder::default()
+            .updated(chrono::Utc::now())
+            .id("m:1")
+            .title("По авторам")
+            .links(links)
+            .content(
+                ContentBuilder::default()
+                    .value(format!("Книг: {}", book_count))
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap(),
+    );
+
+    let mut links = Vec::new();
+    links.push(
+        LinkBuilder::default()
+            .href(format!("{}/porcula/opds/genre", root_url))
+            .rel("alternate")
+            .build()
+            .unwrap(),
+    );
+    links.push(
+        LinkBuilder::default()
+            .href("/porcula/opds/genre")
+            .rel("subsection")
+            .mime_type(atom_nav_mime_type())
+            .build()
+            .unwrap(),
+    );
+
+    e.push(
+        EntryBuilder::default()
+            .updated(chrono::Utc::now())
+            .id("m:2")
+            .title("По жанрам")
+            .links(links)
+            .content(
+                ContentBuilder::default()
+                    .value(format!("Книг: {}", book_count))
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap(),
+    );
+
+    opds_response("Porcula", &root_url, &req_path, e)
+}
+
+fn opds_search_where(req: &Request, query: &str) -> Response {
+    let root_url = root_url(req);
+    let req_path = req.url();
+    let mut e = Vec::new();
+
+    let mut links = Vec::new();
+    let rel_url = format!("/porcula/opds/search/title/{}", urlenc(query));
+    let abs_url = format!("{}{}", &root_url, &rel_url);
+    links.push(
+        LinkBuilder::default()
+            .href(abs_url)
+            .rel("alternate")
+            .build()
+            .unwrap(),
+    );
+    links.push(
+        LinkBuilder::default()
+            .href(rel_url)
+            .rel("subsection")
+            .mime_type(atom_nav_mime_type())
+            .build()
+            .unwrap(),
+    );
+    e.push(
+        EntryBuilder::default()
+            .updated(chrono::Utc::now())
+            .id("st:1")
+            .title("Поиск по наименованию")
+            .links(links)
+            .build()
+            .unwrap(),
+    );
+
+    let mut links = Vec::new();
+    let rel_url = format!("/porcula/opds/search/author/{}", urlenc(query));
+    let abs_url = format!("{}{}", &root_url, &rel_url);
+    links.push(
+        LinkBuilder::default()
+            .href(abs_url)
+            .rel("alternate")
+            .build()
+            .unwrap(),
+    );
+    links.push(
+        LinkBuilder::default()
+            .href(rel_url)
+            .rel("subsection")
+            .mime_type(atom_nav_mime_type())
+            .build()
+            .unwrap(),
+    );
+    e.push(
+        EntryBuilder::default()
+            .updated(chrono::Utc::now())
+            .id("st:2")
+            .title("Поиск по автору")
+            .links(links)
+            .build()
+            .unwrap(),
+    );
+
+    let mut links = Vec::new();
+    let rel_url = format!("/porcula/opds/search/body/{}", urlenc(query));
+    let abs_url = format!("{}{}", &root_url, &rel_url);
+    links.push(
+        LinkBuilder::default()
+            .href(abs_url)
+            .rel("alternate")
+            .build()
+            .unwrap(),
+    );
+    links.push(
+        LinkBuilder::default()
+            .href(rel_url)
+            .rel("subsection")
+            .mime_type(atom_nav_mime_type())
+            .build()
+            .unwrap(),
+    );
+    e.push(
+        EntryBuilder::default()
+            .updated(chrono::Utc::now())
+            .id("st:3")
+            .title("Поиск по тексту книги")
+            .links(links)
+            .build()
+            .unwrap(),
+    );
+
+    opds_response("Porcula - поиск", &root_url, &req_path, e)
+}
+
+fn opds_facet(
+    req: &Request,
+    facet: &str,
+    prefix: Option<&str>,
+    title: &str,
+    translation: Option<&HashMap<String, String>>,
+    fts: &BookReader,
+) -> Response {
+    let root_url = root_url(req);
+    let req_path = req.url();
+    let path = match prefix {
+        Some(x) => format!("/{}/{}", facet, x),
+        None => format!("/{}", facet),
+    };
+    match fts.get_facet(&path, None, None, false) {
+        Ok(data) => {
+            let mut arr: Vec<(String, u64, String)> = data
+                .into_iter()
+                .map(|(path, count)| {
+                    let code = path.rsplitn(2, '/').next().unwrap_or("?");
+                    let title = match translation {
+                        Some(t) => match t.get(code) {
+                            Some(tr) => tr.to_owned(),
+                            None => code.to_owned(),
+                        },
+                        None => code.to_owned(),
+                    };
+                    (path, count, title)
+                })
+                .collect::<Vec<(String, u64, String)>>();
+            arr.sort_by_cached_key(|(_p, _c, t)| LocalString { v: t.to_owned() });
+            let mut e = Vec::new();
+            let updated = chrono::Utc::now();
+            for (path, count, title) in arr {
+                let path = path
+                    .split('/')
+                    .map(|x| urlenc(x))
+                    .collect::<Vec<String>>()
+                    .join("/");
+                let rel_url = format!("/porcula/opds{}", &path);
+                let abs_url = format!("{}{}", &root_url, &rel_url);
+                let mut links = Vec::new();
+                links.push(
+                    LinkBuilder::default()
+                        .href(&abs_url)
+                        .rel("alternate")
+                        .build()
+                        .unwrap(),
+                );
+                links.push(
+                    LinkBuilder::default()
+                        .href(&rel_url)
+                        .rel("subsection")
+                        .mime_type(atom_nav_mime_type())
+                        .build()
+                        .unwrap(),
+                );
+                e.push(
+                    EntryBuilder::default()
+                        .updated(updated)
+                        .id(&abs_url)
+                        .title(title)
+                        .content(
+                            ContentBuilder::default()
+                                .value(format!("Книг: {}", count))
+                                .build()
+                                .unwrap(),
+                        )
+                        .links(links)
+                        .build()
+                        .unwrap(),
+                );
+            }
+            opds_response(title, &root_url, &req_path, e)
+        }
+        Err(e) => Response::text(e.to_string()).with_status_code(500),
+    }
+}
+
+fn opds_search_books(
+    req: &Request,
+    query: &str,
+    order: &str,
+    translation: &HashMap<String, String>,
+    fts: &BookReader,
+) -> Response {
+    let root_url = root_url(req);
+    let req_path = req.url();
+    match fts.search_as_meta(query, order, 1000, 0, false) {
+        Ok(data) => {
+            let mut e = Vec::new();
+            for i in data {
+                let rel_url = format!("/book/{}/{}", urlenc(&i.zipfile), urlenc(&i.filename));
+                let cover_url =
+                    format!("/book/{}/{}/cover", urlenc(&i.zipfile), urlenc(&i.filename));
+                let abs_url = format!("{}{}", &root_url, &rel_url);
+                let mut links = Vec::new();
+                links.push(
+                    LinkBuilder::default()
+                        .href(&abs_url)
+                        .rel("alternate")
+                        .build()
+                        .unwrap(),
+                );
+                links.push(
+                    LinkBuilder::default()
+                        .href(&rel_url)
+                        .rel("http://opds-spec.org/acquisition/open-access")
+                        .mime_type(Some("application/fb2+xml".into()))
+                        .build()
+                        .unwrap(),
+                );
+                links.push(
+                    LinkBuilder::default()
+                        .href(&cover_url)
+                        .rel("http://opds-spec.org/image")
+                        .mime_type(Some("image/jpeg".into()))
+                        .build()
+                        .unwrap(),
+                );
+                let mut b = EntryBuilder::default()
+                    .id(format!("b:{}/{}", i.zipfile, i.filename))
+                    .title(i.title)
+                    .links(links)
+                    .build()
+                    .unwrap();
+                if let Some(x) = i.annotation {
+                    b.set_content(Some(ContentBuilder::default().value(x).build().unwrap()));
+                }
+                b.set_authors(
+                    i.author
+                        .iter()
+                        .map(|a| Person {
+                            name: a.to_owned(),
+                            email: None,
+                            uri: None,
+                        })
+                        .collect::<Vec<Person>>(),
+                );
+                b.set_categories(
+                    i.genre
+                        .iter()
+                        .map(|c| Category {
+                            term: c.to_owned(),
+                            scheme: None,
+                            label: translation.get(c).map(|x| x.to_owned()),
+                        })
+                        .collect::<Vec<Category>>(),
+                );
+                e.push(b);
+            }
+            opds_response("Porcula - книги", &root_url, &req_path, e)
+        }
+        Err(e) => Response::text(e.to_string()).with_status_code(500),
+    }
 }
