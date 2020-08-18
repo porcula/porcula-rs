@@ -129,6 +129,15 @@ fn root_url(req: &Request) -> String {
     format!("{}://{}", proto, host)
 }
 
+// Request -> ("http://server:port", "/prefix/path")
+fn split_request_url(req: &Request) -> (String, String) {
+    (
+        root_url(req),
+        format!("/porcula{}", req.url())
+    )
+}
+
+
 fn handler_count(_req: &Request, fts: &BookReader) -> Response {
     match &fts.count_all() {
         Ok(count) => Response::text(count.to_string()).with_no_cache(),
@@ -372,8 +381,7 @@ fn opds_response(
 }
 
 fn opds_root(req: &Request, fts: &BookReader) -> Response {
-    let root_url = root_url(req);
-    let req_path = req.url();
+    let (root_url, req_path) = split_request_url(req);
     let book_count = match fts.count_all() {
         Ok(c) => c,
         Err(_) => 0,
@@ -450,8 +458,7 @@ fn opds_root(req: &Request, fts: &BookReader) -> Response {
 }
 
 fn opds_search_where(req: &Request, query: &str) -> Response {
-    let root_url = root_url(req);
-    let req_path = req.url();
+    let (root_url, req_path) = split_request_url(req);
     let mut e = Vec::new();
 
     let mut links = Vec::new();
@@ -556,8 +563,7 @@ fn opds_facet(
     translation: Option<&HashMap<String, String>>,
     fts: &BookReader,
 ) -> Response {
-    let root_url = root_url(req);
-    let req_path = req.url();
+    let (root_url, req_path) = split_request_url(req);
     let path = match prefix {
         Some(x) => format!("/{}/{}", facet, x),
         None => format!("/{}", facet),
@@ -639,23 +645,27 @@ fn opds_search_books(
     translation: &HashMap<String, String>,
     fts: &BookReader,
 ) -> Response {
-    let root_url = root_url(req);
-    let req_path = req.url();
+    let (root_url, req_path) = split_request_url(req);
     let limit = OPDS_PAGE_ENTRIES;
     let offset = page * OPDS_PAGE_ENTRIES;
-    //split path to page (last) and head
-    let path_parts = req_path.rsplitn(2, '/').collect::<Vec<&str>>();
+    //split path to base and page
+    let mut path_parts = req_path.split('/').map(|x| urlenc(x)).collect::<Vec<String>>();
     let prev_url = if page == 0 || path_parts.len() < 2 {
         None
     } else {
-        Some(format!("{}/{}", path_parts[1], page - 1))
+        let n = path_parts.len()-1;
+        path_parts[n] = format!("{}", page - 1);
+        Some(path_parts.join("/"))
     };
+    //println!("DEBUG page={} limit={} offset={} root={} path={} -> prev={:?}", page, limit, offset, root_url, req_path, prev_url);
     match fts.search_as_meta(query, order, limit, offset, false) {
         Ok(data) => {
             let next_url = if data.len() < limit {
                 None
             } else {
-                Some(format!("{}/{}", path_parts[1], page + 1))
+                let n = path_parts.len()-1;
+                path_parts[n] = format!("{}", page + 1);
+                Some(path_parts.join("/"))
             };
             let mut e = Vec::new();
             for i in data {
