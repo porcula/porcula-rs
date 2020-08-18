@@ -669,9 +669,9 @@ fn opds_search_books(
             };
             let mut e = Vec::new();
             for i in data {
-                let rel_url = format!("/book/{}/{}", urlenc(&i.zipfile), urlenc(&i.filename));
+                let rel_url = format!("/porcula/book/{}/{}", urlenc(&i.zipfile), urlenc(&i.filename));
                 let cover_url =
-                    format!("/book/{}/{}/cover", urlenc(&i.zipfile), urlenc(&i.filename));
+                    format!("/porcula/book/{}/{}/cover", urlenc(&i.zipfile), urlenc(&i.filename));
                 let abs_url = format!("{}{}", &root_url, &rel_url);
                 let mut links = Vec::new();
                 links.push(
