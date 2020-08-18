@@ -15,6 +15,7 @@ use crate::tr;
 
 const CACHE_IMMUTABLE: u64 = 31_536_000;
 const CACHE_STATIC_ASSET: u64 = 86_400;
+const OPDS_PAGE_ENTRIES: usize = 20;
 
 pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> {
     let fts = app.open_book_reader().unwrap_or_else(|e| {
@@ -85,21 +86,21 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
             (GET) (/opds) => { opds_root(&req, &fts) },
             (GET) (/opds/search/{query: String}) => { opds_search_where(&req, &query) },
             (GET) (/opds/search/{query: String}/) => { opds_search_where(&req, &query) },
-            (GET) (/opds/search/{field: String}/{query: String}) => {
+            (GET) (/opds/search/{field: String}/{query: String}/{page: usize}) => {
                 let query = format!("{}:{}", field, query);
-                opds_search_books(&req, &query, "default", &app.genre_map.translation, &fts)
+                opds_search_books(&req, &query, "default", page, &app.genre_map.translation, &fts)
             },
             (GET) (/opds/author) => { opds_facet(&req, "author", None, "Авторы", None, &fts) },
             (GET) (/opds/author/{prefix: String}) => { opds_facet(&req, "author", Some(&prefix), "Авторы", None, &fts) },
-            (GET) (/opds/author/{prefix: String}/{name: String}) => {
+            (GET) (/opds/author/{prefix: String}/{name: String}/{page: usize}) => {
                 let query = format!("facet:/author/{}/{}", prefix, name);
-                opds_search_books(&req, &query, "title", &app.genre_map.translation, &fts)
+                opds_search_books(&req, &query, "title", page, &app.genre_map.translation, &fts)
             },
             (GET) (/opds/genre) => { opds_facet(&req, "genre", None, "Жанры", Some(&app.genre_map.translation), &fts) },
             (GET) (/opds/genre/{prefix: String}) => { opds_facet(&req, "genre", Some(&prefix), "Жанры", Some(&app.genre_map.translation), &fts) },
-            (GET) (/opds/genre/{cat: String}/{code: String}) => {
+            (GET) (/opds/genre/{cat: String}/{code: String}/{page: usize}) => {
                 let query = format!("facet:/genre/{}/{}", cat, code);
-                opds_search_books(&req, &query, "title", &app.genre_map.translation, &fts)
+                opds_search_books(&req, &query, "title", page, &app.genre_map.translation, &fts)
             },
             _ =>  Response::empty_404() ,
         )
@@ -287,11 +288,21 @@ pub fn read_zipped_file(books_path: &Path, zipfile: &str, filename: &str) -> Vec
 fn atom_mime_type() -> Option<String> {
     Some("application/atom+xml".to_string())
 }
+fn atom_cat_mime_type() -> Option<String> {
+    Some("application/atom+xml;profile=opds-catalog".to_string())
+}
 fn atom_nav_mime_type() -> Option<String> {
     Some("application/atom+xml;profile=opds-catalog;kind=navigation".to_string())
 }
 
-fn opds_response(title: &str, root: &str, path: &str, entries: Vec<Entry>) -> Response {
+fn opds_response(
+    title: &str,
+    root: &str,
+    path: &str,
+    entries: Vec<Entry>,
+    prev_url: Option<String>,
+    next_url: Option<String>,
+) -> Response {
     let abs_url = format!("{}/porcula{}", root, path);
     let mut ns = HashMap::<String, String>::new();
     ns.insert("dcterms".into(), "http://purl.org/dc/terms".into());
@@ -322,7 +333,30 @@ fn opds_response(title: &str, root: &str, path: &str, entries: Vec<Entry>) -> Re
             .build()
             .unwrap(),
     );
-
+    if let Some(url) = prev_url {
+        links.push(
+            LinkBuilder::default()
+                .href(url)
+                .rel("prev")
+                .title(Some(
+                    tr!["Previous Page", "Предыдущая страница"].to_string(),
+                ))
+                .mime_type(atom_cat_mime_type())
+                .build()
+                .unwrap(),
+        );
+    }
+    if let Some(url) = next_url {
+        links.push(
+            LinkBuilder::default()
+                .href(url)
+                .rel("next")
+                .title(Some(tr!["Next Page", "Следующая страница"].to_string()))
+                .mime_type(atom_cat_mime_type())
+                .build()
+                .unwrap(),
+        );
+    }
     let f = FeedBuilder::default()
         .title(title)
         .subtitle(Some("Porcula library OPDS catalog".into()))
@@ -367,11 +401,11 @@ fn opds_root(req: &Request, fts: &BookReader) -> Response {
         EntryBuilder::default()
             .updated(chrono::Utc::now())
             .id("m:1")
-            .title("По авторам")
+            .title(tr!["By author", "По авторам"])
             .links(links)
             .content(
                 ContentBuilder::default()
-                    .value(format!("Книг: {}", book_count))
+                    .value(format!("{}: {}", tr!["Books", "Книг"], book_count))
                     .build()
                     .unwrap(),
             )
@@ -400,11 +434,11 @@ fn opds_root(req: &Request, fts: &BookReader) -> Response {
         EntryBuilder::default()
             .updated(chrono::Utc::now())
             .id("m:2")
-            .title("По жанрам")
+            .title(tr!["By genre", "По жанрам"])
             .links(links)
             .content(
                 ContentBuilder::default()
-                    .value(format!("Книг: {}", book_count))
+                    .value(format!("{}: {}", tr!["Books", "Книг"], book_count))
                     .build()
                     .unwrap(),
             )
@@ -412,7 +446,7 @@ fn opds_root(req: &Request, fts: &BookReader) -> Response {
             .unwrap(),
     );
 
-    opds_response("Porcula", &root_url, &req_path, e)
+    opds_response("Porcula", &root_url, &req_path, e, None, None)
 }
 
 fn opds_search_where(req: &Request, query: &str) -> Response {
@@ -421,7 +455,7 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
     let mut e = Vec::new();
 
     let mut links = Vec::new();
-    let rel_url = format!("/porcula/opds/search/title/{}", urlenc(query));
+    let rel_url = format!("/porcula/opds/search/title/{}/0", urlenc(query));
     let abs_url = format!("{}{}", &root_url, &rel_url);
     links.push(
         LinkBuilder::default()
@@ -442,14 +476,14 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
         EntryBuilder::default()
             .updated(chrono::Utc::now())
             .id("st:1")
-            .title("Поиск по наименованию")
+            .title(tr!["Search by title", "Поиск по наименованию"])
             .links(links)
             .build()
             .unwrap(),
     );
 
     let mut links = Vec::new();
-    let rel_url = format!("/porcula/opds/search/author/{}", urlenc(query));
+    let rel_url = format!("/porcula/opds/search/author/{}/0", urlenc(query));
     let abs_url = format!("{}{}", &root_url, &rel_url);
     links.push(
         LinkBuilder::default()
@@ -470,14 +504,14 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
         EntryBuilder::default()
             .updated(chrono::Utc::now())
             .id("st:2")
-            .title("Поиск по автору")
+            .title(tr!["Search by author", "Поиск по автору"])
             .links(links)
             .build()
             .unwrap(),
     );
 
     let mut links = Vec::new();
-    let rel_url = format!("/porcula/opds/search/body/{}", urlenc(query));
+    let rel_url = format!("/porcula/opds/search/body/{}/0", urlenc(query));
     let abs_url = format!("{}{}", &root_url, &rel_url);
     links.push(
         LinkBuilder::default()
@@ -498,13 +532,20 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
         EntryBuilder::default()
             .updated(chrono::Utc::now())
             .id("st:3")
-            .title("Поиск по тексту книги")
+            .title(tr!["Search in book text", "Поиск по тексту книги"])
             .links(links)
             .build()
             .unwrap(),
     );
 
-    opds_response("Porcula - поиск", &root_url, &req_path, e)
+    opds_response(
+        tr!["Porcula - search", "Porcula - поиск"],
+        &root_url,
+        &req_path,
+        e,
+        None,
+        None,
+    )
 }
 
 fn opds_facet(
@@ -541,11 +582,15 @@ fn opds_facet(
             let mut e = Vec::new();
             let updated = chrono::Utc::now();
             for (path, count, title) in arr {
-                let path = path
+                let mut path = path
                     .split('/')
                     .map(|x| urlenc(x))
                     .collect::<Vec<String>>()
                     .join("/");
+                //append page to final path, i.e. "/author/A/Abcd" -> "/author/A/Abcd/0"
+                if prefix.is_some() {
+                    path.push_str("/0");
+                }
                 let rel_url = format!("/porcula/opds{}", &path);
                 let abs_url = format!("{}{}", &root_url, &rel_url);
                 let mut links = Vec::new();
@@ -571,7 +616,7 @@ fn opds_facet(
                         .title(title)
                         .content(
                             ContentBuilder::default()
-                                .value(format!("Книг: {}", count))
+                                .value(format!("{}: {}", tr!["Books", "Книг"], count))
                                 .build()
                                 .unwrap(),
                         )
@@ -580,7 +625,7 @@ fn opds_facet(
                         .unwrap(),
                 );
             }
-            opds_response(title, &root_url, &req_path, e)
+            opds_response(title, &root_url, &req_path, e, None, None)
         }
         Err(e) => Response::text(e.to_string()).with_status_code(500),
     }
@@ -590,13 +635,28 @@ fn opds_search_books(
     req: &Request,
     query: &str,
     order: &str,
+    page: usize,
     translation: &HashMap<String, String>,
     fts: &BookReader,
 ) -> Response {
     let root_url = root_url(req);
     let req_path = req.url();
-    match fts.search_as_meta(query, order, 1000, 0, false) {
+    let limit = OPDS_PAGE_ENTRIES;
+    let offset = page * OPDS_PAGE_ENTRIES;
+    //split path to page (last) and head
+    let path_parts = req_path.rsplitn(2, '/').collect::<Vec<&str>>();
+    let prev_url = if page == 0 || path_parts.len() < 2 {
+        None
+    } else {
+        Some(format!("{}/{}", path_parts[1], page - 1))
+    };
+    match fts.search_as_meta(query, order, limit, offset, false) {
         Ok(data) => {
+            let next_url = if data.len() < limit {
+                None
+            } else {
+                Some(format!("{}/{}", path_parts[1], page + 1))
+            };
             let mut e = Vec::new();
             for i in data {
                 let rel_url = format!("/book/{}/{}", urlenc(&i.zipfile), urlenc(&i.filename));
@@ -658,7 +718,14 @@ fn opds_search_books(
                 );
                 e.push(b);
             }
-            opds_response("Porcula - книги", &root_url, &req_path, e)
+            opds_response(
+                tr!["Porcula - books", "Porcula - книги"],
+                &root_url,
+                &req_path,
+                e,
+                prev_url,
+                next_url,
+            )
         }
         Err(e) => Response::text(e.to_string()).with_status_code(500),
     }
