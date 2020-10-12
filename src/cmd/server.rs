@@ -131,12 +131,8 @@ fn root_url(req: &Request) -> String {
 
 // Request -> ("http://server:port", "/prefix/path")
 fn split_request_url(req: &Request) -> (String, String) {
-    (
-        root_url(req),
-        format!("/porcula{}", req.url())
-    )
+    (root_url(req), format!("/porcula{}", req.url()))
 }
-
 
 fn handler_count(_req: &Request, fts: &BookReader) -> Response {
     match &fts.count_all() {
@@ -649,11 +645,14 @@ fn opds_search_books(
     let limit = OPDS_PAGE_ENTRIES;
     let offset = page * OPDS_PAGE_ENTRIES;
     //split path to base and page
-    let mut path_parts = req_path.split('/').map(|x| urlenc(x)).collect::<Vec<String>>();
+    let mut path_parts = req_path
+        .split('/')
+        .map(|x| urlenc(x))
+        .collect::<Vec<String>>();
     let prev_url = if page == 0 || path_parts.len() < 2 {
         None
     } else {
-        let n = path_parts.len()-1;
+        let n = path_parts.len() - 1;
         path_parts[n] = format!("{}", page - 1);
         Some(path_parts.join("/"))
     };
@@ -663,15 +662,22 @@ fn opds_search_books(
             let next_url = if data.len() < limit {
                 None
             } else {
-                let n = path_parts.len()-1;
+                let n = path_parts.len() - 1;
                 path_parts[n] = format!("{}", page + 1);
                 Some(path_parts.join("/"))
             };
             let mut e = Vec::new();
             for i in data {
-                let rel_url = format!("/porcula/book/{}/{}", urlenc(&i.zipfile), urlenc(&i.filename));
-                let cover_url =
-                    format!("/porcula/book/{}/{}/cover", urlenc(&i.zipfile), urlenc(&i.filename));
+                let rel_url = format!(
+                    "/porcula/book/{}/{}",
+                    urlenc(&i.zipfile),
+                    urlenc(&i.filename)
+                );
+                let cover_url = format!(
+                    "/porcula/book/{}/{}/cover",
+                    urlenc(&i.zipfile),
+                    urlenc(&i.filename)
+                );
                 let abs_url = format!("{}{}", &root_url, &rel_url);
                 let mut links = Vec::new();
                 links.push(
