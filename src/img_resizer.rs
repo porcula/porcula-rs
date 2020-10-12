@@ -9,7 +9,7 @@ pub fn resize(src: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
             //let dst = src.resize(width, height, image::imageops::FilterType::Lanczos3);
             let dst = src.thumbnail(width, height);
             let mut buf = Vec::<u8>::new();
-            let mut enc = image::jpeg::JPEGEncoder::new(&mut buf);
+            let mut enc = image::jpeg::JpegEncoder::new(&mut buf);
             let dim = dst.dimensions();
             match enc.encode(&dst.into_rgb(), dim.0, dim.1, image::ColorType::Rgb8) {
                 Ok(()) => Ok(buf),
