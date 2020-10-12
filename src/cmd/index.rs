@@ -24,9 +24,11 @@ struct ParsedFileStats {
     warning_count: usize,
     readed_size: usize,
     parsed_size: usize,
+    indexed_size: usize,
     time_to_unzip: Duration,
     time_to_parse: Duration,
     time_to_image: Duration,
+    time_to_commit: Duration,
 }
 
 #[derive(Clone)]
@@ -83,11 +85,20 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         .map(|x| x.parse::<usize>().unwrap_or(1))
         .unwrap_or(1);
     let heap_mb_str = matches.value_of("memory").unwrap_or(DEFAULT_HEAP_SIZE_MB);
-    let heap_size: usize = heap_mb_str.parse().unwrap_or_else(|_| {
+    let heap_size = 1024 * 1024 * heap_mb_str.parse::<usize>().unwrap_or_else(|_| {
         eprintln!(
             "{} {}",
             tr!["Invalid memory size", "Некорректный размер"],
             heap_mb_str
+        );
+        std::process::exit(4);
+    });
+    let batch_mb_str = matches.value_of("batch-size").unwrap_or(DEFAULT_BATCH_SIZE_MB);
+    let batch_size = 1024 * 1024 * batch_mb_str.parse::<usize>().unwrap_or_else(|_| {
+        eprintln!(
+            "{} {}",
+            tr!["Invalid memory size", "Некорректный размер"],
+            batch_mb_str
         );
         std::process::exit(4);
     });
@@ -97,7 +108,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         &app.index_path,
         &app.index_settings.stemmer,
         index_threads,
-        heap_size * 1024 * 1024,
+        heap_size,
     )
     .unwrap();
     let book_writer_lock = Arc::new(Mutex::new(book_writer));
@@ -146,8 +157,8 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
     );
     if app.debug {
         println!(
-            "index threads={:?} read threads={:?} heap={}",
-            index_threads, read_threads, heap_size
+            "index threads={:?} read threads={:?} heap={} batch={}",
+            index_threads, read_threads, heap_size, batch_size,
         );
     }
     //save settings with index
@@ -187,6 +198,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
     let mut time_to_parse = Duration::default();
     let mut time_to_image = Duration::default();
     let mut time_to_commit = Duration::default();
+    let mut time_to_commit_main = Duration::default();
 
     if !delta {
         println!("{}", tr!["deleting index...", "очищаем индекс..."]);
@@ -267,6 +279,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                 let opts = opts.clone();
                 scope.spawn(move |_| {
                     let tid = format!("{:?}", std::thread::current().id());
+                    let mut running_indexed_size : usize = 0;
                     for i in first_file_num..last_file_num {
                         if canceled.load(Ordering::SeqCst) {
                             break;
@@ -287,6 +300,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                         let file = file.read_to_end(&mut data);
                         let ze = zt.elapsed();
                         let book_writer_lock = book_writer_lock.clone();
+                        let book_writer_lock2 = book_writer_lock.clone();
                         match file {
                             Ok(_) => {
                                 let mut stats = process_file(
@@ -298,6 +312,20 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                                     &opts,
                                 );
                                 stats.time_to_unzip = ze;
+                                running_indexed_size += stats.indexed_size;
+                                if running_indexed_size > batch_size {
+                                    running_indexed_size = 0;
+                                    if opts.debug {
+                                        println!("Batch commit: start");
+                                    }
+                                    let ct = Instant::now();
+                                    let mut book_writer = book_writer_lock2.lock().unwrap();
+                                    book_writer.commit().unwrap();
+                                    stats.time_to_commit = ct.elapsed();
+                                    if opts.debug {
+                                        println!("Batch commit: done");
+                                    }
+                                }
                                 stats_sender_clone.send(stats).unwrap();
                             }
                             Err(e) => {
@@ -343,6 +371,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
             time_to_unzip += i.time_to_unzip;
             time_to_parse += i.time_to_parse;
             time_to_image += i.time_to_image;
+            time_to_commit += i.time_to_image;
         }
 
         let book_writer_lock = book_writer_lock.clone();
@@ -356,7 +385,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
             }
             let ct = Instant::now();
             book_writer.commit().unwrap();
-            time_to_commit += ct.elapsed();
+            time_to_commit_main += ct.elapsed();
             if opts.debug {
                 println!("Commit: done");
             }
@@ -409,18 +438,20 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         println!(
             "Main thread: {} : commit {}%",
             format_duration(total),
-            time_to_commit.as_millis() * 100 / total,
+            time_to_commit_main.as_millis() * 100 / total,
         );
         let ue = time_to_unzip.as_millis();
         let pe = time_to_parse.as_millis();
         let ie = time_to_image.as_millis();
-        let total = ue + pe + ie + 1;
+        let ce = time_to_commit.as_millis();
+        let total = ue + pe + ie + ce + 1;
         println!(
-            "Reader threads: {} : unpacking {}%, parse {}%, image resize {}%",
+            "Reader threads: {} : unpacking {}%, parse {}%, image resize {}%, commit {}%",
             format_duration(total / (read_threads as u128)),
             ue * 100 / total,
             pe * 100 / total,
             ie * 100 / total,
+            ce * 100 / total,
         );
     }
 }
@@ -543,6 +574,7 @@ where
                     if !opts.body {
                         b.length = stats.parsed_size as u64;
                     }
+                    stats.indexed_size = match b.body { Some(ref x) => x.len(), None=> 0 };
 
                     let mut book_writer = book_writer_lock.lock().unwrap();
                     match book_writer.add_book(b, opts.genre_map) {

@@ -148,6 +148,15 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         .help(tr!["Heap memory size", "Размер памяти"]),
                 )
                 .arg(
+                    Arg::with_name("batch-size")
+                        .default_value(DEFAULT_BATCH_SIZE_MB)
+                        .short("B")
+                        .long("batch-size")
+                        .takes_value(true)
+                        .value_name("MB")
+                        .help(tr!["Batch size between commits", "Размер данных между сохранениями"]),
+                )
+                .arg(
                     Arg::with_name("with-body")
                         .long("with-body")
                         .help(tr![
