@@ -558,7 +558,9 @@ where
                 } else {
                     stats.ignored = true;
                     println!(
-                        "         -> {} {}",
+                        "{}/{} -> {} {}",
+                        zipfile,
+                        filename,
                         tr!["ignore lang", "игнорируем язык"],
                         lang
                     );

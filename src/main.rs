@@ -23,6 +23,7 @@ mod fb2_parser;
 mod fts;
 mod genre_map;
 mod img_resizer;
+mod letter_replacer;
 mod sort;
 mod types;
 #[macro_use]
@@ -35,7 +36,7 @@ use crate::types::*;
 #[allow(clippy::cognitive_complexity)]
 fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
     clap::App::new("Porcula")
-        .version("0.1")
+        .version(env!("CARGO_PKG_VERSION"))
         .about(tr![
             "Full-text search on collection of e-books",
             "Полнотекстовый поиск по коллекции электронных книг"

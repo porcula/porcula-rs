@@ -10,10 +10,12 @@ use tantivy::schema::*;
 use tantivy::tokenizer::*;
 use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, Searcher, TantivyError};
 
+use crate::letter_replacer::LetterReplacer;
 use crate::sort::LocalString;
 
 const MAX_MATCHES_BEFORE_ORDERING: usize = 10000;
-const TOKENIZER_NAME: &str = "porcula";
+const SIMPLE_TOKENIZER_NAME: &str = "p_simple";
+const STEMMED_TOKENIZER_NAME: &str = "p_stemmed";
 
 type Result<T> = tantivy::Result<T>;
 
@@ -33,7 +35,8 @@ struct Fields {
     sequence: Field,
     seqnum: Field,
     annotation: Field,
-    body: Field,
+    body: Field,  //simple tokenizer
+    xbody: Field, //stemmed tokenizer
     cover_image: Field,
     cover: Field,
 }
@@ -74,13 +77,19 @@ pub struct BookReader {
 
 impl Fields {
     fn build(schema_builder: &mut SchemaBuilder) -> Self {
-        let indexing_opts = TextFieldIndexing::default()
-            .set_tokenizer(TOKENIZER_NAME)
+        let simple_indexing_opts = TextFieldIndexing::default()
+            .set_tokenizer(SIMPLE_TOKENIZER_NAME)
+            .set_index_option(IndexRecordOption::WithFreqsAndPositions);
+        let stemmed_indexing_opts = TextFieldIndexing::default()
+            .set_tokenizer(STEMMED_TOKENIZER_NAME)
             .set_index_option(IndexRecordOption::WithFreqsAndPositions);
         let stored_text_opts = TextOptions::default()
-            .set_indexing_options(indexing_opts.clone())
+            .set_indexing_options(simple_indexing_opts.clone())
             .set_stored();
-        let nonstored_text_opts = TextOptions::default().set_indexing_options(indexing_opts);
+        let nonstored_simple_text_opts =
+            TextOptions::default().set_indexing_options(simple_indexing_opts);
+        let nonstored_stemmed_text_opts =
+            TextOptions::default().set_indexing_options(stemmed_indexing_opts);
         Fields {
             facet: schema_builder.add_facet_field("facet"),
             id: schema_builder.add_text_field("id", STORED | STRING),
@@ -96,7 +105,8 @@ impl Fields {
             sequence: schema_builder.add_text_field("sequence", stored_text_opts.clone()),
             seqnum: schema_builder.add_i64_field("seqnum", STORED),
             annotation: schema_builder.add_text_field("annotation", stored_text_opts),
-            body: schema_builder.add_text_field("body", nonstored_text_opts),
+            body: schema_builder.add_text_field("body", nonstored_simple_text_opts),
+            xbody: schema_builder.add_text_field("xbody", nonstored_stemmed_text_opts),
             cover_image: schema_builder.add_bytes_field("cover_image"),
             cover: schema_builder.add_u64_field("cover", STORED),
         }
@@ -124,6 +134,7 @@ impl Fields {
             seqnum: load_field("seqnum")?,
             annotation: load_field("annotation")?,
             body: load_field("body")?,
+            xbody: load_field("xbody")?,
             cover_image: load_field("cover_image")?,
             cover: load_field("cover")?,
         })
@@ -135,7 +146,14 @@ fn file_facet(zipfile: &str, filename: &str) -> Facet {
     Facet::from_text(&path)
 }
 
-fn get_tokenizer(stemmer: &str) -> TextAnalyzer {
+fn get_simple_tokenizer() -> TextAnalyzer {
+    TextAnalyzer::from(SimpleTokenizer)
+        .filter(RemoveLongFilter::limit(40))
+        .filter(LowerCaser)
+        .filter(LetterReplacer)
+}
+
+fn get_stemmed_tokenizer(stemmer: &str) -> TextAnalyzer {
     let language = match stemmer {
         "ar" => Language::Arabic,
         "da" => Language::Danish,
@@ -160,6 +178,7 @@ fn get_tokenizer(stemmer: &str) -> TextAnalyzer {
     TextAnalyzer::from(SimpleTokenizer)
         .filter(RemoveLongFilter::limit(40))
         .filter(LowerCaser)
+        .filter(LetterReplacer)
         .filter(Stemmer::new(language))
 }
 
@@ -185,9 +204,9 @@ impl BookWriter {
                 (index, schema, fields)
             }
         };
-        index
-            .tokenizers()
-            .register(TOKENIZER_NAME, get_tokenizer(stemmer));
+        let tokenizers = index.tokenizers();
+        tokenizers.register(SIMPLE_TOKENIZER_NAME, get_simple_tokenizer());
+        tokenizers.register(STEMMED_TOKENIZER_NAME, get_stemmed_tokenizer(stemmer));
 
         let writer = match num_threads {
             Some(n) if n > 0 => index.writer_with_num_threads(n, heap_size)?,
@@ -326,7 +345,8 @@ impl BookWriter {
             doc.add_text(self.fields.annotation, &v);
         }
         if let Some(text) = &book.body {
-            doc.add_text(self.fields.body, &text);
+            doc.add_text(self.fields.body, &text); //simple tokenizer
+            doc.add_text(self.fields.xbody, &text); //stemmed tokenizer
         }
         //consume book with image
         if let Some(raw) = book.cover_image {
@@ -396,9 +416,9 @@ fn first_u64_value(doc: &Document, field: Field) -> u64 {
 impl BookReader {
     pub fn new<P: AsRef<Path>>(index_dir: P, lang: &str) -> Result<BookReader> {
         let index = Index::open_in_dir(index_dir)?;
-        index
-            .tokenizers()
-            .register(TOKENIZER_NAME, get_tokenizer(lang));
+        let tokenizers = index.tokenizers();
+        tokenizers.register(SIMPLE_TOKENIZER_NAME, get_simple_tokenizer());
+        tokenizers.register(STEMMED_TOKENIZER_NAME, get_stemmed_tokenizer(lang));
         let schema = index.schema();
         let fields = Fields::load(&schema)?;
         let reader = index
