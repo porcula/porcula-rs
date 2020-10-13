@@ -23,7 +23,7 @@ pub const DEFAULT_LANGUAGE: &str = "ru";
 pub const DEFAULT_INDEX_DIR: &str = "index";
 pub const DEFAULT_BOOKS_DIR: &str = "books";
 pub const DEFAULT_HEAP_SIZE_MB: &str = "100";
-pub const DEFAULT_BATCH_SIZE_MB: &str = "300";
+pub const DEFAULT_BATCH_SIZE_MB: &str = "1024";
 pub const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:8083";
 pub const DEFAULT_QUERY_HITS_STR: &str = "10";
 pub const DEFAULT_QUERY_HITS: usize = 10;
@@ -109,7 +109,7 @@ impl IndexSettings {
         //file not exists yet - use defaults
         Ok(IndexSettings {
             langs: vec![DEFAULT_LANGUAGE.to_string()],
-            stemmer: DEFAULT_LANGUAGE.to_string(),
+            stemmer: "OFF".to_string(),
             books_dir: DEFAULT_BOOKS_DIR.to_string(),
             disabled: HashSet::<String>::new(),
         })

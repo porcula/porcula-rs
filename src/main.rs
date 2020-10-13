@@ -114,7 +114,7 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         .long("stemmer")
                         .takes_value(true)
                         .value_name(tr!["language code | OFF", "код языка | OFF"])
-                        .default_value(DEFAULT_LANGUAGE)
+                        .default_value("OFF")
                         .help(tr!["Word stemmer", "Алгоритм определения основы слова"]),
                 )
                 .arg(

@@ -65,6 +65,7 @@ pub struct BookWriter {
     writer: IndexWriter,
     reader: IndexReader,
     fields: Fields,
+    use_stemmer: bool,
 }
 
 pub struct BookReader {
@@ -220,6 +221,7 @@ impl BookWriter {
             schema,
             reader,
             fields,
+            use_stemmer: stemmer != "OFF"
         })
     }
 
@@ -346,7 +348,9 @@ impl BookWriter {
         }
         if let Some(text) = &book.body {
             doc.add_text(self.fields.body, &text); //simple tokenizer
-            doc.add_text(self.fields.xbody, &text); //stemmed tokenizer
+            if self.use_stemmer {
+                doc.add_text(self.fields.xbody, &text); //stemmed tokenizer
+            }
         }
         //consume book with image
         if let Some(raw) = book.cover_image {

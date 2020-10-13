@@ -39,6 +39,11 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
         &app.index_settings.langs
     );
     println!(
+        "{}: {:?}",
+        tr!["Stemmer", "Стеммер"],
+        &app.index_settings.stemmer
+    );
+    println!(
         "{}: http://{}/porcula/home.html",
         tr!["Application", "Приложение"],
         &listen_addr
