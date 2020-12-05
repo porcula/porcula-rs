@@ -22,49 +22,44 @@ pub struct LocalString {
 impl Ord for LocalStr<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         //empty string -> to end
-        if !self.v.is_empty() && other.v.is_empty() {
-            return Ordering::Less;
-        } else if self.v.is_empty() && !other.v.is_empty() {
-            return Ordering::Greater;
-        }
-        let mut ai = self
-            .v
-            .chars()
-            .filter(|c| c.is_alphanumeric() || c.is_whitespace())
-            .peekable();
-        let mut bi = other
-            .v
-            .chars()
-            .filter(|c| c.is_alphanumeric() || c.is_whitespace())
-            .peekable();
-        let a1 = ai.peek().is_some();
-        let b1 = bi.peek().is_some();
         //non-alphanumeric -> to end
-        if !a1 && b1 {
-            return Ordering::Greater;
-        } else if a1 && !b1 {
-            return Ordering::Less;
-        } else if !a1 && !b1 {
-            return self.v.cmp(&other.v);
-        }
-        for (a, b) in ai.zip(bi) {
-            if a == b {
-                continue;
-            }
-            let ac = ORDER.get(&a);
-            let bc = ORDER.get(&b);
-            if let Some(a2) = ac {
-                if let Some(b2) = bc {
-                    return a2.cmp(&b2);
-                } else {
-                    return Ordering::Less;
+        //ignore non-alphanumerics
+        match (self.v.is_empty(), other.v.is_empty()) {
+            (true, true) => Ordering::Equal,
+            (false, true) => Ordering::Less,
+            (true, false) => Ordering::Greater,
+            (false, false) => {
+                let mut ai = self
+                    .v
+                    .chars()
+                    .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+                    .peekable();
+                let mut bi = other
+                    .v
+                    .chars()
+                    .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+                    .peekable();
+                match (ai.peek().is_some(), bi.peek().is_some()) {
+                    (false, false) => self.v.cmp(&other.v),
+                    (false, true) => Ordering::Greater,
+                    (true, false) => Ordering::Less,
+                    (true, true) => {
+                        for (a, b) in ai.zip(bi) {
+                            if a == b {
+                                continue;
+                            }
+                            return match (ORDER.get(&a), ORDER.get(&b)) {
+                                (Some(a2), Some(b2)) => a2.cmp(&b2),
+                                (Some(_), None) => Ordering::Less,
+                                (None, Some(_)) => Ordering::Greater,
+                                (None, None) => self.v.cmp(&other.v),
+                            };
+                        }
+                        Ordering::Equal
+                    }
                 }
-            } else if bc.is_some() {
-                return Ordering::Greater;
             }
-            return a.cmp(&b);
         }
-        self.v.cmp(&other.v)
     }
 }
 

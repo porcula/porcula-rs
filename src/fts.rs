@@ -221,7 +221,7 @@ impl BookWriter {
             schema,
             reader,
             fields,
-            use_stemmer: stemmer != "OFF"
+            use_stemmer: stemmer != "OFF",
         })
     }
 
@@ -256,6 +256,8 @@ impl BookWriter {
         &mut self,
         book: crate::types::Book,
         genre_map: &crate::genre_map::GenreMap,
+        body: bool,
+        xbody: bool
     ) -> Result<()> {
         let mut doc = Document::default();
         doc.add_facet(self.fields.facet, file_facet(&book.zipfile, &book.filename)); //facet field is mandatory
@@ -347,8 +349,10 @@ impl BookWriter {
             doc.add_text(self.fields.annotation, &v);
         }
         if let Some(text) = &book.body {
-            doc.add_text(self.fields.body, &text); //simple tokenizer
-            if self.use_stemmer {
+            if body {
+                doc.add_text(self.fields.body, &text); //simple tokenizer
+            }
+            if xbody && self.use_stemmer {
                 doc.add_text(self.fields.xbody, &text); //stemmed tokenizer
             }
         }

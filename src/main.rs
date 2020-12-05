@@ -154,14 +154,17 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         .long("batch-size")
                         .takes_value(true)
                         .value_name("MB")
-                        .help(tr!["Batch size between commits", "Размер данных между сохранениями"]),
+                        .help(tr![
+                            "Batch size between commits",
+                            "Размер данных между сохранениями"
+                        ]),
                 )
                 .arg(
                     Arg::with_name("with-body")
                         .long("with-body")
                         .help(tr![
                             "Enable indexing of book's body",
-                            "Индексировать основной текст книги"
+                            "Индексировать текст книги (без учёта склонения)"
                         ])
                         .conflicts_with("without-body"),
                 )
@@ -170,9 +173,27 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         .long("without-body")
                         .help(tr![
                             "Disable indexing of book's body",
-                            "Не индексировать основной текст книги"
+                            "Не индексировать текст книги"
                         ])
                         .conflicts_with("with-body"),
+                )
+                .arg(
+                    Arg::with_name("with-xbody")
+                        .long("with-xbody")
+                        .help(tr![
+                            "Enable indexing of book's body with stemming",
+                            "Индексировать текст книги (по основам слов)"
+                        ])
+                        .conflicts_with("without-xbody"),
+                )
+                .arg(
+                    Arg::with_name("without-xbody")
+                        .long("without-xbody")
+                        .help(tr![
+                            "Disable indexing of book's body with stemming",
+                            "Не индексировать текст книги (по основам слов)"
+                        ])
+                        .conflicts_with("with-xbody"),
                 )
                 .arg(
                     Arg::with_name("with-annotation")

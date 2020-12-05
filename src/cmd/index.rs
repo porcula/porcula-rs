@@ -38,6 +38,7 @@ struct ParseOpts<'a> {
     debug: bool,
     delta: bool,
     body: bool,
+    xbody: bool,
     annotation: bool,
     cover: bool,
 }
@@ -68,7 +69,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         Some("full") => false,
         _ => true,
     };
-    for i in &["body", "annotation", "cover"] {
+    for i in &["body", "xbody", "annotation", "cover"] {
         let s = (*i).to_string();
         if matches.is_present(format!("with-{}", i)) {
             app.index_settings.disabled.remove(&s); //enabling field
@@ -85,23 +86,29 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         .map(|x| x.parse::<usize>().unwrap_or(1))
         .unwrap_or(1);
     let heap_mb_str = matches.value_of("memory").unwrap_or(DEFAULT_HEAP_SIZE_MB);
-    let heap_size = 1024 * 1024 * heap_mb_str.parse::<usize>().unwrap_or_else(|_| {
-        eprintln!(
-            "{} {}",
-            tr!["Invalid memory size", "Некорректный размер"],
-            heap_mb_str
-        );
-        std::process::exit(4);
-    });
-    let batch_mb_str = matches.value_of("batch-size").unwrap_or(DEFAULT_BATCH_SIZE_MB);
-    let batch_size = 1024 * 1024 * batch_mb_str.parse::<usize>().unwrap_or_else(|_| {
-        eprintln!(
-            "{} {}",
-            tr!["Invalid memory size", "Некорректный размер"],
-            batch_mb_str
-        );
-        std::process::exit(4);
-    });
+    let heap_size = 1024
+        * 1024
+        * heap_mb_str.parse::<usize>().unwrap_or_else(|_| {
+            eprintln!(
+                "{} {}",
+                tr!["Invalid memory size", "Некорректный размер"],
+                heap_mb_str
+            );
+            std::process::exit(4);
+        });
+    let batch_mb_str = matches
+        .value_of("batch-size")
+        .unwrap_or(DEFAULT_BATCH_SIZE_MB);
+    let batch_size = 1024
+        * 1024
+        * batch_mb_str.parse::<usize>().unwrap_or_else(|_| {
+            eprintln!(
+                "{} {}",
+                tr!["Invalid memory size", "Некорректный размер"],
+                batch_mb_str
+            );
+            std::process::exit(4);
+        });
     app.load_genre_map();
     //open index
     let book_writer = crate::fts::BookWriter::new(
@@ -129,6 +136,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         debug: app.debug,
         delta,
         body: !app.index_settings.disabled.contains(&"body".to_string()),
+        xbody: !app.index_settings.disabled.contains(&"xbody".to_string()),
         annotation: !app
             .index_settings
             .disabled
@@ -146,13 +154,13 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
     .expect("Error setting Ctrl-C handler");
 
     println!(
-        "----{}----\ndir={} delta={} lang={:?} stemmer={} body={} annotation={} cover={} files={:?}",
+        "----{}----\ndir={} delta={} lang={:?} stemmer={} body={} xbody={} annotation={} cover={} files={:?}",
         tr!["START INDEXING","НАЧИНАЕМ ИНДЕКСАЦИЮ"],
         &app.books_path.display(),
         opts.delta,
         &lang_set,
         &app.index_settings.stemmer,
-        opts.body, opts.annotation, opts.cover,
+        opts.body, opts.xbody, opts.annotation, opts.cover,
         app.book_formats.keys()
     );
     if app.debug {
@@ -279,7 +287,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                 let opts = opts.clone();
                 scope.spawn(move |_| {
                     let tid = format!("{:?}", std::thread::current().id());
-                    let mut running_indexed_size : usize = 0;
+                    let mut running_indexed_size: usize = 0;
                     for i in first_file_num..last_file_num {
                         if canceled.load(Ordering::SeqCst) {
                             break;
@@ -534,7 +542,7 @@ where
             &zipfile,
             &filename,
             &mut buf_file,
-            opts.body,
+            opts.body || opts.xbody,
             opts.annotation,
             opts.cover,
         );
@@ -571,13 +579,16 @@ where
                     }
 
                     stats.parsed_size = b.size_of(); //metadata + plain text + cover image
-                    if !opts.body {
+                    if !opts.body && !opts.xbody {
                         b.length = stats.parsed_size as u64;
                     }
-                    stats.indexed_size = match b.body { Some(ref x) => x.len(), None=> 0 };
+                    stats.indexed_size = match b.body {
+                        Some(ref x) => x.len(),
+                        None => 0,
+                    };
 
                     let mut book_writer = book_writer_lock.lock().unwrap();
-                    match book_writer.add_book(b, opts.genre_map) {
+                    match book_writer.add_book(b, opts.genre_map, opts.body, opts.xbody) {
                         Ok(_) => stats.indexed = true,
                         Err(e) => eprintln!(
                             "{}/{} -> {} {}",

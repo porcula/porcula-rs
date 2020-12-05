@@ -143,8 +143,7 @@ child_folklore+child_tale+child_tale_rus=Детский фольклор
 foreign_children=Зарубежная литература для детей
 child_classical=Классическая детская литература
 prose_game=Книга-игра
-ya=Подростковая литература
-teens_literature+teens_sf=Подростковая литература
+ya+teens_literature+teens_sf=Подростковая литература
 
 
 /love=Любовные романы
