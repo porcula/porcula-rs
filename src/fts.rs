@@ -108,7 +108,7 @@ impl Fields {
             annotation: schema_builder.add_text_field("annotation", stored_text_opts),
             body: schema_builder.add_text_field("body", nonstored_simple_text_opts),
             xbody: schema_builder.add_text_field("xbody", nonstored_stemmed_text_opts),
-            cover_image: schema_builder.add_bytes_field("cover_image"),
+            cover_image: schema_builder.add_bytes_field("cover_image", FAST | STORED),
             cover: schema_builder.add_u64_field("cover", STORED),
         }
     }
@@ -397,13 +397,12 @@ fn first_str(doc: &Document, field: Field) -> &str {
 }
 
 fn joined_values(doc: &Document, field: Field) -> String {
-    let v: Vec<&str> = doc.get_all(field).iter().filter_map(|x| x.text()).collect();
+    let v: Vec<&str> = doc.get_all(field).filter_map(|x| x.text()).collect();
     v.join(", ")
 }
 
 fn vec_string(doc: &Document, field: Field) -> Vec<String> {
     doc.get_all(field)
-        .iter()
         .filter_map(|x| x.text())
         .map(|s| s.to_string())
         .collect()
@@ -619,7 +618,7 @@ impl BookReader {
         let searcher = self.reader.searcher();
         if let Some(doc_address) = self.find_book(&searcher, &zipfile, &filename)? {
             let segment_reader = searcher.segment_reader(doc_address.segment_ord());
-            if let Some(bytes_reader) = segment_reader.fast_fields().bytes(self.fields.cover_image)
+            if let Ok(bytes_reader) = segment_reader.fast_fields().bytes(self.fields.cover_image)
             {
                 return Ok(Some(bytes_reader.get_bytes(doc_address.doc()).to_vec()));
             }
