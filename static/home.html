@@ -263,9 +263,13 @@
                     read_url = book_url + '/render?find=' + find_words;
                     read_target = "_blank";
                 }
-                var cover_url = v("cover") != "0" ? book_url + "/cover" : "";
+
+                var cover_url = "defcover.png";
+                if (v("cover") != "0") {
+                    cover_url = "data:image/jpeg;base64," + btoa(String.fromCharCode.apply(null,v("cover_image")));
+                }
                 var row_class = "list" + (append && tab=='' ? " appended" : "");
-                tab += '<tr class="' + row_class + '" data-cover="' + cover_url + '">'
+                tab += '<tr class="' + row_class + '">'
                     + '<td class="action gauge g' + size_pct + '" colspan="2"><a target="' + read_target + '" href="' + read_url + '">Читать</a></td>'
                     + '<td class="title">' + title + '</td>'
                     + '<td class="author">' + vale("author",", ") + '</td>'
@@ -275,7 +279,7 @@
                     + '</tr>'
                     ;
                 tab += '<tr class="detail hidden">'
-                    + '<td class="action" colspan="2"><a href="' + down_url + '"><img class="download cover" src="defcover.png"></a></td>'
+                    + '<td class="action" colspan="2"><a href="' + down_url + '"><img class="download cover" src="'+cover_url+'"></a></td>'
                     + '<td colspan="6"><div class="gridc">'
                     + (ex("translator") ? '<div class="n mv translator">Перевод</div><div class="v mv translator">' + vale("translator",", ") + '</div>' : '')
                     + (ex("src_author") ? '<div class="n2 src_author">Ориг.автор</div><div class="v2 src_author">' + vale("src_author",", ") + '</div>' : '')
@@ -326,10 +330,6 @@
             var detail = tr.next();
             tr.addClass("expanded");
             $("td.title", tr).removeClass("gauge");
-            var cover = tr.data("cover");
-            if (cover) {
-                $("td.action img", detail).attr("src", cover);
-            }
             detail.removeClass('hidden');
         }
         function collapseRow(tr) {
