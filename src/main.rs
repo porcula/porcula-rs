@@ -11,7 +11,6 @@ extern crate zip;
 extern crate rouille;
 #[macro_use]
 extern crate lazy_static;
-extern crate crossbeam_utils;
 extern crate deepsize;
 
 use clap::{Arg, SubCommand};
@@ -128,15 +127,6 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                             "Number of indexing workers",
                             "Число потоков индексирования"
                         ]),
-                )
-                .arg(
-                    Arg::with_name("read-threads")
-                        .short("r")
-                        .long("read-threads")
-                        .takes_value(true)
-                        .value_name("number")
-                        .default_value("1")
-                        .help(tr!["Number of reading threads", "Число потоков чтения"]),
                 )
                 .arg(
                     Arg::with_name("heap-memory")
@@ -377,7 +367,7 @@ fn main() {
     }
 
     let mut book_formats: BookFormats = HashMap::new();
-    book_formats.insert(".fb2", Box::new(fb2_parser::FB2BookFormat {}));
+    book_formats.insert(".fb2", Box::new(fb2_parser::Fb2BookFormat {}));
 
     let mut app = Application {
         books_path,

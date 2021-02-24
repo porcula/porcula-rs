@@ -178,7 +178,7 @@ fn handler_facet(req: &Request, fts: &BookReader, debug: bool) -> Response {
     };
     let req_query = req.get_param("query");
     let opt_query = match req_query {
-        Some(ref s) if s != "" => Some(s.as_str()),
+        Some(ref s) if !s.is_empty() => Some(s.as_str()),
         _ => None,
     };
     match req.get_param("path") {
@@ -295,14 +295,14 @@ pub fn read_zipped_file(books_path: &Path, zipfile: &str, filename: &str) -> Vec
     content
 }
 
-fn atom_mime_type() -> Option<String> {
-    Some("application/atom+xml".to_string())
+fn atom_mime_type() -> String {
+    "application/atom+xml".to_string()
 }
-fn atom_cat_mime_type() -> Option<String> {
-    Some("application/atom+xml;profile=opds-catalog".to_string())
+fn atom_cat_mime_type() -> String {
+    "application/atom+xml;profile=opds-catalog".to_string()
 }
-fn atom_nav_mime_type() -> Option<String> {
-    Some("application/atom+xml;profile=opds-catalog;kind=navigation".to_string())
+fn atom_nav_mime_type() -> String {
+    "application/atom+xml;profile=opds-catalog;kind=navigation".to_string()
 }
 
 fn opds_response(
@@ -317,32 +317,26 @@ fn opds_response(
     let mut ns = HashMap::<String, String>::new();
     ns.insert("dcterms".into(), "http://purl.org/dc/terms".into());
 
-    let mut links = Vec::new();
-
-    links.push(
+    let mut links = vec![
         LinkBuilder::default()
             .href(&abs_url)
             .rel("self")
             .mime_type(atom_nav_mime_type())
             .build()
             .unwrap(),
-    );
-    links.push(
         LinkBuilder::default()
             .href("/porcula/opds")
             .rel("start")
             .mime_type(atom_nav_mime_type())
             .build()
             .unwrap(),
-    );
-    links.push(
         LinkBuilder::default()
             .href("/porcula/opds/search/{searchTerms}")
             .rel("search")
             .mime_type(atom_mime_type())
             .build()
             .unwrap(),
-    );
+    ];
     if let Some(url) = prev_url {
         links.push(
             LinkBuilder::default()
@@ -383,29 +377,22 @@ fn opds_response(
 
 fn opds_root(req: &Request, fts: &BookReader) -> Response {
     let (root_url, req_path) = split_request_url(req);
-    let book_count = match fts.count_all() {
-        Ok(c) => c,
-        Err(_) => 0,
-    };
+    let book_count = fts.count_all().unwrap_or(0);
     let mut e = Vec::new();
 
-    let mut links = Vec::new();
-    links.push(
+    let links = vec![
         LinkBuilder::default()
             .href(format!("{}/porcula/opds/author", root_url))
             .rel("alternate")
             .build()
             .unwrap(),
-    );
-    links.push(
         LinkBuilder::default()
             .href("/porcula/opds/author")
             .rel("subsection")
             .mime_type(atom_nav_mime_type())
             .build()
             .unwrap(),
-    );
-
+    ];
     e.push(
         EntryBuilder::default()
             .updated(chrono::Utc::now())
@@ -422,23 +409,19 @@ fn opds_root(req: &Request, fts: &BookReader) -> Response {
             .unwrap(),
     );
 
-    let mut links = Vec::new();
-    links.push(
+    let links = vec![
         LinkBuilder::default()
             .href(format!("{}/porcula/opds/genre", root_url))
             .rel("alternate")
             .build()
             .unwrap(),
-    );
-    links.push(
         LinkBuilder::default()
             .href("/porcula/opds/genre")
             .rel("subsection")
             .mime_type(atom_nav_mime_type())
             .build()
             .unwrap(),
-    );
-
+    ];
     e.push(
         EntryBuilder::default()
             .updated(chrono::Utc::now())
@@ -462,24 +445,21 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
     let (root_url, req_path) = split_request_url(req);
     let mut e = Vec::new();
 
-    let mut links = Vec::new();
     let rel_url = format!("/porcula/opds/search/title/{}/0", urlenc(query));
     let abs_url = format!("{}{}", &root_url, &rel_url);
-    links.push(
+    let links = vec![
         LinkBuilder::default()
             .href(abs_url)
             .rel("alternate")
             .build()
             .unwrap(),
-    );
-    links.push(
         LinkBuilder::default()
             .href(rel_url)
             .rel("subsection")
             .mime_type(atom_nav_mime_type())
             .build()
             .unwrap(),
-    );
+    ];
     e.push(
         EntryBuilder::default()
             .updated(chrono::Utc::now())
@@ -490,24 +470,21 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
             .unwrap(),
     );
 
-    let mut links = Vec::new();
     let rel_url = format!("/porcula/opds/search/author/{}/0", urlenc(query));
     let abs_url = format!("{}{}", &root_url, &rel_url);
-    links.push(
+    let links = vec![
         LinkBuilder::default()
             .href(abs_url)
             .rel("alternate")
             .build()
             .unwrap(),
-    );
-    links.push(
         LinkBuilder::default()
             .href(rel_url)
             .rel("subsection")
             .mime_type(atom_nav_mime_type())
             .build()
             .unwrap(),
-    );
+    ];
     e.push(
         EntryBuilder::default()
             .updated(chrono::Utc::now())
@@ -518,24 +495,21 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
             .unwrap(),
     );
 
-    let mut links = Vec::new();
     let rel_url = format!("/porcula/opds/search/body/{}/0", urlenc(query));
     let abs_url = format!("{}{}", &root_url, &rel_url);
-    links.push(
+    let links = vec![
         LinkBuilder::default()
             .href(abs_url)
             .rel("alternate")
             .build()
             .unwrap(),
-    );
-    links.push(
         LinkBuilder::default()
             .href(rel_url)
             .rel("subsection")
             .mime_type(atom_nav_mime_type())
             .build()
             .unwrap(),
-    );
+    ];
     e.push(
         EntryBuilder::default()
             .updated(chrono::Utc::now())
@@ -585,7 +559,7 @@ fn opds_facet(
                     (path, count, title)
                 })
                 .collect::<Vec<(String, u64, String)>>();
-            arr.sort_by_cached_key(|(_p, _c, t)| LocalString { v: t.to_owned() });
+            arr.sort_by_cached_key(|(_p, _c, t)| LocalString ( t.to_owned() ));
             let mut e = Vec::new();
             let updated = chrono::Utc::now();
             for (path, count, title) in arr {
@@ -600,22 +574,19 @@ fn opds_facet(
                 }
                 let rel_url = format!("/porcula/opds{}", &path);
                 let abs_url = format!("{}{}", &root_url, &rel_url);
-                let mut links = Vec::new();
-                links.push(
+                let links = vec![
                     LinkBuilder::default()
                         .href(&abs_url)
                         .rel("alternate")
                         .build()
                         .unwrap(),
-                );
-                links.push(
                     LinkBuilder::default()
                         .href(&rel_url)
                         .rel("subsection")
                         .mime_type(atom_nav_mime_type())
                         .build()
                         .unwrap(),
-                );
+                ];
                 e.push(
                     EntryBuilder::default()
                         .updated(updated)
@@ -684,30 +655,25 @@ fn opds_search_books(
                     urlenc(&i.filename)
                 );
                 let abs_url = format!("{}{}", &root_url, &rel_url);
-                let mut links = Vec::new();
-                links.push(
+                let links = vec![
                     LinkBuilder::default()
                         .href(&abs_url)
                         .rel("alternate")
                         .build()
                         .unwrap(),
-                );
-                links.push(
                     LinkBuilder::default()
                         .href(&rel_url)
                         .rel("http://opds-spec.org/acquisition/open-access")
                         .mime_type(Some("application/fb2+xml".into()))
                         .build()
                         .unwrap(),
-                );
-                links.push(
                     LinkBuilder::default()
                         .href(&cover_url)
                         .rel("http://opds-spec.org/image")
                         .mime_type(Some("image/jpeg".into()))
                         .build()
                         .unwrap(),
-                );
+                ];
                 let mut b = EntryBuilder::default()
                     .id(format!("b:{}/{}", i.zipfile, i.filename))
                     .title(i.title)

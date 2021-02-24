@@ -1,46 +1,41 @@
 use std::cmp::{Ordering, PartialOrd};
 use std::collections::HashMap;
-use std::iter::FromIterator;
 
 lazy_static! {
     static ref ORDER: HashMap::<char, usize> = {
         const ORDERED: &str = "АаБбВвГгДдЕеЁёЖжЗзИиЙйКкЛлМмНнОоПпРрСсТтУуФфХхЦцЧчШшЩщЪъЫыЬьЭэЮюЯяAaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz0123456789";
-        HashMap::from_iter(ORDERED.chars().enumerate().map(|i| (i.1, i.0)))
+        ORDERED.chars().enumerate().map(|i| (i.1, i.0)).collect()
     };
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct LocalStr<'a> {
-    pub v: &'a str,
-}
+pub struct LocalStr <'a> (pub &'a str);
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct LocalString {
-    pub v: String,
-}
+pub struct LocalString (pub String);
 
 impl Ord for LocalStr<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         //empty string -> to end
         //non-alphanumeric -> to end
         //ignore non-alphanumerics
-        match (self.v.is_empty(), other.v.is_empty()) {
+        match (self.0.is_empty(), other.0.is_empty()) {
             (true, true) => Ordering::Equal,
             (false, true) => Ordering::Less,
             (true, false) => Ordering::Greater,
             (false, false) => {
                 let mut ai = self
-                    .v
+                    .0
                     .chars()
                     .filter(|c| c.is_alphanumeric() || c.is_whitespace())
                     .peekable();
                 let mut bi = other
-                    .v
+                    .0
                     .chars()
                     .filter(|c| c.is_alphanumeric() || c.is_whitespace())
                     .peekable();
                 match (ai.peek().is_some(), bi.peek().is_some()) {
-                    (false, false) => self.v.cmp(&other.v),
+                    (false, false) => self.0.cmp(&other.0),
                     (false, true) => Ordering::Greater,
                     (true, false) => Ordering::Less,
                     (true, true) => {
@@ -52,7 +47,7 @@ impl Ord for LocalStr<'_> {
                                 (Some(a2), Some(b2)) => a2.cmp(&b2),
                                 (Some(_), None) => Ordering::Less,
                                 (None, Some(_)) => Ordering::Greater,
-                                (None, None) => self.v.cmp(&other.v),
+                                (None, None) => self.0.cmp(&other.0),
                             };
                         }
                         Ordering::Equal
@@ -71,7 +66,7 @@ impl PartialOrd for LocalStr<'_> {
 
 impl Ord for LocalString {
     fn cmp(&self, other: &Self) -> Ordering {
-        LocalStr { v: &self.v }.cmp(&LocalStr { v: &other.v })
+        LocalStr(&self.0).cmp(&LocalStr(&other.0))
     }
 }
 
@@ -83,8 +78,8 @@ impl PartialOrd for LocalString {
 
 #[test]
 fn test_sort() {
-    let a = LocalStr { v: "Фыва" };
-    let b = LocalStr { v: "Asdf" };
+    let a = LocalStr("Фыва");
+    let b = LocalStr("Asdf");
     assert_eq!(a.cmp(&b), Ordering::Less);
 
     let mut a = vec![
@@ -119,6 +114,6 @@ fn test_sort() {
         "*",
         "",
     ];
-    a.sort_by_cached_key(|x| LocalStr { v: x });
+    a.sort_by_cached_key(|x| LocalStr(x));
     assert_eq!(a, b);
 }

@@ -57,14 +57,14 @@ impl GenreMap {
     }
 
     ///normalize code
-    fn normalize<'a>(&'a self, code: &str) -> String {
+    fn normalize(&self, code: &str) -> String {
         code.chars()
             .filter(|&c| c.is_alphanumeric() || c.is_whitespace() || c == '-' || c == '_')
             .collect::<String>()
             .to_lowercase()
     }
 
-    pub fn path_for<'a>(&'a self, code: &str) -> String {
+    pub fn path_for(&self, code: &str) -> String {
         let code = self.normalize(code);
         //map to primary code
         let primary = self.code_to_prim.get(&code).unwrap_or(&code);
@@ -77,7 +77,7 @@ impl GenreMap {
         format!("{}/{}", cat, primary)
     }
 
-    pub fn translate<'a>(&'a self, code: &str) -> String {
+    pub fn translate(&self, code: &str) -> String {
         let code = self.normalize(code);
         match self.translation.get(code.as_str()) {
             Some(ref t) => (*t).to_string(),

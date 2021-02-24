@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::io::BufRead;
 use std::str;
 
-pub struct FB2BookFormat;
+pub struct Fb2BookFormat;
 
 enum ParentNode {
     Start,
@@ -52,7 +52,7 @@ fn get_attr_string<B: BufRead>(
     }
 }
 
-impl BookFormat for FB2BookFormat {
+impl BookFormat for Fb2BookFormat {
     fn file_extension(&self) -> &'static str {
         ".fb2"
     }
@@ -669,15 +669,13 @@ impl BookFormat for FB2BookFormat {
                     res.push(Event::Start(
                         BytesStart::owned_name("span").with_attributes(attrs),
                     ));
-                    for attr in e.attributes() {
-                        if let Ok(a) = attr {
-                            let mut txt: Vec<u8> = vec![];
-                            txt.extend_from_slice(a.key);
-                            txt.extend_from_slice(b"=");
-                            txt.extend_from_slice(&*a.value);
-                            txt.extend_from_slice(b" ");
-                            res.push(Event::Text(BytesText::from_escaped(txt)));
-                        }
+                    for a in e.attributes().flatten() {
+                        let mut txt: Vec<u8> = vec![];
+                        txt.extend_from_slice(a.key);
+                        txt.extend_from_slice(b"=");
+                        txt.extend_from_slice(&*a.value);
+                        txt.extend_from_slice(b" ");
+                        res.push(Event::Text(BytesText::from_escaped(txt)));
                     }
                 }
                 Ok(Event::Text(_)) => res.push(event.unwrap().into_owned()),
@@ -702,11 +700,10 @@ impl BookFormat for FB2BookFormat {
                                 src.extend_from_slice(&*ct); //content-type
                                 src.extend_from_slice(b" ;base64, ");
                                 src.extend_from_slice(&*data); //image data
-                                let mut attrs = vec![];
-                                attrs.push(Attribute {
+                                let attrs = vec![Attribute {
                                     key: b"src",
                                     value: Cow::Owned(src),
-                                });
+                                }];
                                 let b = BytesStart::borrowed_name(b"img").with_attributes(attrs);
                                 writer.write_event(Event::Start(b)).unwrap();
                             }
@@ -731,7 +728,7 @@ impl BookFormat for FB2BookFormat {
 
 fn is_base64(x: u8) -> bool {
     //standard base64 chars: + / 0-9 A-Z a-z
-    x == 43 || (x >= 47 && x <= 57) || (x >= 65 && x <= 90) || (x >= 97 && x <= 122)
+    x == 43 || (47..=57).contains(&x) || (65..=90).contains(&x) || (97..=122).contains(&x)
 }
 
 /// base64 raw string -> (decoded raw, warning) | error

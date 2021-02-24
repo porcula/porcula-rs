@@ -21,8 +21,8 @@ impl<'a> TokenStream for LetterReplacerTokenStream<'a> {
         }
         // replace lowercase cyrillic 'YO' (ё) to 'E' (е)
         //TODO: pass replacement map as filter parameter
-        if self.tail.token_mut().text.contains("\u{0451}") {
-            let mut r = self.tail.token_mut().text.replace("\u{0451}", "\u{0435}");
+        if self.tail.token_mut().text.contains('\u{0451}') {
+            let mut r = self.tail.token_mut().text.replace('\u{0451}', "\u{0435}");
             mem::swap(&mut self.tail.token_mut().text, &mut r);
         }
         true

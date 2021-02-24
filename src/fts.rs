@@ -491,20 +491,20 @@ impl BookReader {
                 .collect();
             let mut offset = offset;
             match order {
-                "title" => all_docs.sort_by_cached_key(|d| LocalString {
-                    v: first_str(&d, self.fields.title).to_string(),
-                }),
-                "author" => all_docs.sort_by_cached_key(|d| LocalString {
-                    v: joined_values(&d, self.fields.author).to_lowercase(),
-                }),
-                "translator" => all_docs.sort_by_cached_key(|d| LocalString {
-                    v: joined_values(&d, self.fields.translator).to_lowercase(),
-                }),
+                "title" => all_docs.sort_by_cached_key(|d| LocalString (
+                    first_str(&d, self.fields.title).to_string()
+                )),
+                "author" => all_docs.sort_by_cached_key(|d| LocalString (
+                    joined_values(&d, self.fields.author).to_lowercase()
+                )),
+                "translator" => all_docs.sort_by_cached_key(|d| LocalString (
+                    joined_values(&d, self.fields.translator).to_lowercase()
+                )),
                 "sequence" => all_docs.sort_by_cached_key(|d| {
                     (
-                        LocalString {
-                            v: first_str(&d, self.fields.sequence).to_lowercase(),
-                        },
+                        LocalString (
+                            first_str(&d, self.fields.sequence).to_lowercase()
+                        ),
                         first_i64_value(&d, self.fields.seqnum),
                     )
                 }),
