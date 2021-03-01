@@ -347,7 +347,8 @@ fn main() {
             }
         }
     }
-    /* DON'T WORK ON WINDOWS WITH DIRECTORY SYMLINK!!!
+    //canonicalize() DON'T WORK ON WINDOWS WITH DIRECTORY SYMLINK
+    #[cfg(not(target_os = "windows"))]
     let index_path = index_path.canonicalize().unwrap_or_else(|e| {
         eprintln!(
             "{}: {}\n{}\n{}",
@@ -360,7 +361,7 @@ fn main() {
             ],
         );
         std::process::exit(1);
-    });*/
+    });
 
     let mut index_settings = IndexSettings::load(&index_path, debug).unwrap_or_else(|e| {
         eprintln!("{}", e);
