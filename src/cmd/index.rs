@@ -335,7 +335,9 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                             pct: zip_progress_pct,
                             total_files: files_count as u64,
                         };
-                        if zippart_send.send(zip_part).is_err() { break }
+                        if zippart_send.send(zip_part).is_err() {
+                            break;
+                        }
                         first_idx += chunk_size;
                         last_idx += chunk_size;
                     }
@@ -405,7 +407,9 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                                         total_files: zip_part.total_files,
                                         ..Default::default()
                                     };
-                                    if book_send.send(Some(book)).is_err() { break }
+                                    if book_send.send(Some(book)).is_err() {
+                                        break;
+                                    }
                                     continue;
                                 }
                             }
@@ -423,7 +427,9 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                                     pct: zip_part.pct,
                                     total_files: zip_part.total_files,
                                 };
-                                if file_send.send(Some(file)).is_err() { break }
+                                if file_send.send(Some(file)).is_err() {
+                                    break;
+                                }
                             }
                             Err(e) => {
                                 eprintln!("error reading {}/{}: {}", &zipfile, &filename, e);
@@ -431,7 +437,9 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                             }
                         }
                     }
-                    if zipstat_send.send(stats).is_err() { break }
+                    if zipstat_send.send(stats).is_err() {
+                        break;
+                    }
                 }
                 if debug {
                     println!("z#{} stop", thread);
@@ -470,10 +478,11 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                             );
                         }
                         let book = process_file(file, lang_filter, &book_formats, &opts, debug);
-                        if book_send.send(Some(book)).is_err() { break }
-                    }
-                    else { 
-                        break 
+                        if book_send.send(Some(book)).is_err() {
+                            break;
+                        }
+                    } else {
+                        break;
                     }
                 }
                 if debug {
@@ -507,80 +516,81 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                 break;
             }
             if let Some(book) = book {
-            if debug {
-                println!("  {}/{} -> {}", book.zipfile, book.filename, book.state);
-            }
-            let mut indexed = 0;
-            match book.state {
-                BookState::Invalid => (),
-                BookState::Skipped => book_skipped += 1,
-                BookState::Ignored => book_ignored += 1,
-                BookState::Valid(b) => {
-                    match book_writer.add_book(
-                        &book.zipfile,
-                        &book.filename,
-                        b,
-                        &genre_map,
-                        opts.body,
-                        opts.xbody,
-                    ) {
-                        Ok(_) => {
-                            book_indexed += 1;
-                            running_indexed_size += book.parsed_size;
-                            indexed = 1;
-                        }
-                        Err(e) => {
-                            error_count += 1;
-                            eprintln!(
-                                "{}/{} -> {} {}",
-                                book.zipfile,
-                                book.filename,
-                                tr!["indexing error", "ошибка индексации"],
-                                e
-                            );
-                            //and continue
+                if debug {
+                    println!("  {}/{} -> {}", book.zipfile, book.filename, book.state);
+                }
+                let mut indexed = 0;
+                match book.state {
+                    BookState::Invalid => (),
+                    BookState::Skipped => book_skipped += 1,
+                    BookState::Ignored => book_ignored += 1,
+                    BookState::Valid(b) => {
+                        match book_writer.add_book(
+                            &book.zipfile,
+                            &book.filename,
+                            b,
+                            &genre_map,
+                            opts.body,
+                            opts.xbody,
+                        ) {
+                            Ok(_) => {
+                                book_indexed += 1;
+                                running_indexed_size += book.parsed_size;
+                                indexed = 1;
+                            }
+                            Err(e) => {
+                                error_count += 1;
+                                eprintln!(
+                                    "{}/{} -> {} {}",
+                                    book.zipfile,
+                                    book.filename,
+                                    tr!["indexing error", "ошибка индексации"],
+                                    e
+                                );
+                                //and continue
+                            }
                         }
                     }
                 }
-            }
-            processed_files
-                .entry(book.zipfile.clone())
-                .and_modify(|x| {
-                    (*x).0 += 1;
-                    (*x).1 += indexed;
-                })
-                .or_insert((1, indexed));
-            //mark whole archives as indexed when all files are done
-            if let Some((processed,indexed)) = processed_files.get(&book.zipfile) {
-                if *processed == book.total_files {
+                processed_files
+                    .entry(book.zipfile.clone())
+                    .and_modify(|x| {
+                        (*x).0 += 1;
+                        (*x).1 += indexed;
+                    })
+                    .or_insert((1, indexed));
+                //mark whole archives as indexed when all files are done
+                if let Some((processed, indexed)) = processed_files.get(&book.zipfile) {
+                    if *processed == book.total_files {
+                        if debug {
+                            println!("mark {} as indexed", book.zipfile);
+                        }
+                        book_writer
+                            .mark_zipfile_as_indexed(&book.zipfile, *indexed)
+                            .unwrap();
+                    }
+                }
+                error_count += book.error_count;
+                warning_count += book.warning_count;
+                book_readed_size += book.readed_size;
+                book_parsed_size += book.parsed_size;
+                time_to_parse += book.time_to_parse;
+                time_to_image += book.time_to_image;
+                if running_indexed_size > batch_size {
+                    running_indexed_size = 0;
                     if debug {
-                        println!("mark {} as indexed", book.zipfile);
+                        println!("Batch commit: start");
                     }
-                    book_writer
-                        .mark_zipfile_as_indexed(&book.zipfile, *indexed)
-                        .unwrap();
+                    let ct = Instant::now();
+                    book_writer.commit().unwrap();
+                    time_to_commit += ct.elapsed();
+                    if debug {
+                        println!("Batch commit: done");
+                    }
                 }
+            } else {
+                break;
             }
-            error_count += book.error_count;
-            warning_count += book.warning_count;
-            book_readed_size += book.readed_size;
-            book_parsed_size += book.parsed_size;
-            time_to_parse += book.time_to_parse;
-            time_to_image += book.time_to_image;
-            if running_indexed_size > batch_size {
-                running_indexed_size = 0;
-                if debug {
-                    println!("Batch commit: start");
-                }
-                let ct = Instant::now();
-                book_writer.commit().unwrap();
-                time_to_commit += ct.elapsed();
-                if debug {
-                    println!("Batch commit: done");
-                }
-            }
-            }
-            else { break }
         }
 
         if debug {
