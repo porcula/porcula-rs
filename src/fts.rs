@@ -539,7 +539,7 @@ impl BookReader {
             let mut offset = offset;
             match order {
                 "title" => all_docs.sort_by_cached_key(|d| {
-                    LocalString(first_str(&d, self.fields.title).to_string())
+                    LocalString(first_str(&d, self.fields.title).to_lowercase())
                 }),
                 "author" => all_docs.sort_by_cached_key(|d| {
                     LocalString(joined_values(&d, self.fields.author).to_lowercase())
