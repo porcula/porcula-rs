@@ -13,8 +13,6 @@ pub struct Person {
 #[derive(Debug, DeepSizeOf)]
 pub struct Book {
     pub id: Option<String>,
-    pub zipfile: String,
-    pub filename: String,
     pub encoding: String,
     pub length: u64,
     pub title: Vec<String>, // title | translated-title,source-title
@@ -57,8 +55,6 @@ pub trait BookFormat: Send + Sync {
 
     fn parse(
         &self,
-        zipfile: &str,
-        filename: &str,
         reader: &mut dyn BufRead,
         with_body: bool,
         with_annotation: bool,
@@ -87,8 +83,8 @@ impl Display for Book {
             .zip(self.seqnum.iter())
             .map(|(name, num)| format!("{}-{}", name, num))
             .collect();
-        write!(f, "zip={} file={} enc={} lang={} len={} title={} date={} genre={} author={} src.author={} trans={} seq={} keyword={} ann.len={} img.len={} warn={}", 
-           &self.zipfile, &self.filename, &self.encoding, &self.lang.join(" / "), self.length, &self.title.join(" / "), 
+        write!(f, "enc={} lang={} len={} title={} date={} genre={} author={} src.author={} trans={} seq={} keyword={} ann.len={} img.len={} warn={}", 
+           &self.encoding, &self.lang.join(" / "), self.length, &self.title.join(" / "), 
            self.date.join(" / "),
            self.genre.join(", "),
            person_to_string(&self.author),

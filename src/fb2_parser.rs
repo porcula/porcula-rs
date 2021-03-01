@@ -63,8 +63,6 @@ impl BookFormat for Fb2BookFormat {
     #[allow(clippy::cognitive_complexity, clippy::single_match)]
     fn parse(
         &self,
-        zipfile: &str,
-        filename: &str,
         reader: &mut dyn BufRead,
         with_body: bool,
         with_annotation: bool,
@@ -439,8 +437,6 @@ impl BookFormat for Fb2BookFormat {
 
         Ok(Book {
             id,
-            zipfile: zipfile.into(),
-            filename: filename.into(),
             encoding: xml.encoding().name().to_string(),
             length,
             title,

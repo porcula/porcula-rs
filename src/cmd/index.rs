@@ -1,37 +1,95 @@
 use clap::ArgMatches;
+use crossbeam_utils::sync::WaitGroup;
 use regex::Regex;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::fmt::{Display, Formatter, Result};
 use std::fs::DirEntry;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::cmd::*;
-use crate::fts::BookWriter;
 use crate::tr;
+use crate::types::Book;
 
-//const READ_BUFFER_SIZE: usize = 2 * 1024 * 1024;
+//const READ_BUFFER_SIZE: usize = 8 * 1024 * 1024;
+
+#[derive(Debug)]
+struct ZipPart {
+    path: PathBuf,
+    zipfile: String,
+    first_idx: usize,
+    last_idx: usize,
+    pct: u64,
+    total_files: u64,
+}
 
 #[derive(Default)]
-struct ParsedFileStats {
-    is_book: bool,
-    skipped: bool,
-    ignored: bool,
-    indexed: bool,
+struct ZipPartStats {
+    zipfile: String,
+    packed_size: u64,
+    time_to_unzip: Duration,
+    error_count: usize,
+}
+
+struct UnzippedFile {
+    zipfile: String,
+    filename: String,
+    data: Vec<u8>,
+    pct: u64,
+    total_files: u64,
+}
+
+enum BookState {
+    Valid(Book),
+    Invalid,
+    Skipped,
+    Ignored,
+}
+impl Display for BookState {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        match self {
+            BookState::Valid(_) => write!(f, "Valid"),
+            BookState::Invalid => write!(f, "Invalid"),
+            BookState::Skipped => write!(f, "Skipped"),
+            BookState::Ignored => write!(f, "Ignored"),
+        }
+    }
+}
+
+struct ParsedBook {
+    zipfile: String,
+    filename: String,
+    state: BookState,
     error_count: usize,
     warning_count: usize,
     readed_size: usize,
     parsed_size: usize,
-    indexed_size: usize,
+    content_size: usize,
     time_to_parse: Duration,
     time_to_image: Duration,
-    time_to_index: Duration,
+    total_files: u64,
+}
+impl Default for ParsedBook {
+    fn default() -> Self {
+        ParsedBook {
+            zipfile: String::default(),
+            filename: String::default(),
+            state: BookState::Invalid,
+            error_count: 0,
+            warning_count: 0,
+            readed_size: 0,
+            parsed_size: 0,
+            content_size: 0,
+            time_to_parse: Duration::default(),
+            time_to_image: Duration::default(),
+            total_files: 0,
+        }
+    }
 }
 
-struct ParseOpts<'a> {
-    book_formats: &'a BookFormats,
-    genre_map: &'a GenreMap,
-    debug: bool,
+#[derive(Clone)]
+struct ParseOpts {
     body: bool,
     xbody: bool,
     annotation: bool,
@@ -40,6 +98,7 @@ struct ParseOpts<'a> {
 
 #[allow(clippy::cognitive_complexity)]
 pub fn run_index(matches: &ArgMatches, app: &mut Application) {
+    let debug = app.debug;
     if matches.occurrences_of("language") > 0 {
         if let Some(v) = matches.values_of_lossy("language") {
             app.index_settings.langs = v;
@@ -60,7 +119,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
             app.index_settings.stemmer = v.to_string();
         }
     }
-    let delta = ! matches!( matches.value_of("INDEX-MODE"), Some("full") );
+    let delta = !matches!(matches.value_of("INDEX-MODE"), Some("full"));
     for i in &["body", "xbody", "annotation", "cover"] {
         let s = (*i).to_string();
         if matches.is_present(format!("with-{}", i)) {
@@ -73,6 +132,14 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
     let index_threads = matches
         .value_of("index-threads")
         .map(|x| x.parse::<usize>().unwrap_or(0));
+    let read_threads = matches
+        .value_of("read-threads")
+        .map(|x| x.parse::<usize>().unwrap_or(1))
+        .unwrap_or(1);
+    let read_queue = matches
+        .value_of("read-queue")
+        .map(|x| x.parse::<usize>().unwrap_or(64))
+        .unwrap_or(64);
     let heap_mb_str = matches.value_of("memory").unwrap_or(DEFAULT_HEAP_SIZE_MB);
     let heap_size = 1024
         * 1024
@@ -98,46 +165,25 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
             std::process::exit(4);
         });
     app.load_genre_map();
-    //open index
-    let mut book_writer = crate::fts::BookWriter::new(
-        &app.index_path,
-        &app.index_settings.stemmer,
-        index_threads,
-        heap_size,
-    )
-    .unwrap();
-    let tt = Instant::now();
-    let mut lang_set = HashSet::<&str>::new();
+    let genre_map = &app.genre_map;
+    let book_formats = &app.book_formats;
+
+    let mut lang_set = HashSet::<String>::new();
     let mut any_lang = false;
     for i in &app.index_settings.langs {
-        lang_set.insert(i);
+        lang_set.insert(i.to_string());
         if i == "ANY" {
             any_lang = true
         }
     }
     //index books with `undefined` language too
-    let lang_filter = |lang: &str| any_lang || lang_set.contains(&lang) || lang.is_empty();
+    let lang_filter = |lang: &str| any_lang || lang_set.contains(lang) || lang.is_empty();
     let opts = ParseOpts {
-        book_formats: &app.book_formats,
-        genre_map: &app.genre_map,
-        debug: app.debug,
-        body: !app.index_settings.disabled.contains(&"body".to_string()),
-        xbody: !app.index_settings.disabled.contains(&"xbody".to_string()),
-        annotation: !app
-            .index_settings
-            .disabled
-            .contains(&"annotation".to_string()),
-        cover: !app.index_settings.disabled.contains(&"cover".to_string()),
+        body: !app.index_settings.disabled.contains("body"),
+        xbody: !app.index_settings.disabled.contains("xbody"),
+        annotation: !app.index_settings.disabled.contains("annotation"),
+        cover: !app.index_settings.disabled.contains("cover"),
     };
-
-    //exit nicely if user press Ctrl+C
-    let canceled = Arc::new(AtomicBool::new(false));
-    let c = canceled.clone();
-    ctrlc::set_handler(move || {
-        eprintln!("Cancel indexing...");
-        c.store(true, Ordering::SeqCst);
-    })
-    .expect("Error setting Ctrl-C handler");
 
     println!(
         "----{}----\ndir={} delta={} lang={:?} stemmer={} body={} xbody={} annotation={} cover={} files={:?}",
@@ -149,14 +195,14 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         opts.body, opts.xbody, opts.annotation, opts.cover,
         app.book_formats.keys()
     );
-    if app.debug {
+    if debug {
         println!(
-            "index threads={:?} heap={} batch={}",
-            index_threads, heap_size, batch_size,
+            "read threads={} read queue={} index threads={:?} heap={} batch={}",
+            read_threads, read_queue, index_threads, heap_size, batch_size,
         );
     }
     //save settings with index
-    if app.debug {
+    if debug {
         println!("store settings in {}", app.index_path.display());
     }
     app.index_settings
@@ -166,229 +212,486 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
             std::process::exit(2);
         });
 
+    //open index
+    let mut book_writer = crate::fts::BookWriter::new(
+        &app.index_path,
+        &app.index_settings.stemmer,
+        index_threads,
+        heap_size,
+    )
+    .unwrap();
+    //enforce reindex of books inside specified files
+    let indexed_books = match files.is_empty() && delta {
+        true => {
+            if debug {
+                println!("loading list of indexed files");
+            }
+            Some(book_writer.get_indexed_books().unwrap()) //read ALL indexed file names as two-level hash: zipfile->{filenames}
+        }
+        false => None,
+    };
+    //println!("DEBUG indexed_books={:?}", indexed_books);
+
     let mut zip_files: Vec<DirEntry> = std::fs::read_dir(&app.books_path)
         .expect("directory not readable")
         .map(|x| x.expect("invalid file"))
         .filter(is_zip_file)
         .filter(|x| files.is_empty() || files.contains(&x.file_name().as_os_str()))
         .collect();
-    zip_files.sort_by_key(|e| get_numeric_sort_key(e.file_name().to_str().unwrap_or_default()));
-    let zip_count = zip_files.len();
+    zip_files.sort_by_key(|x| get_numeric_sort_key(x.file_name().to_str().unwrap_or_default()));
+    let zip_total_count = zip_files.len();
     let zip_total_size = zip_files.iter().fold(0, |acc, entry| {
         acc + entry.metadata().map(|m| m.len()).unwrap_or(0)
     });
-    let mut zip_progress_size = 0;
-    let mut zip_processed_size = 0;
-    let mut zip_index = 0;
-    let mut book_count = 0;
-    let mut book_indexed = 0;
-    let mut book_ignored = 0;
-    let mut book_skipped = 0;
-    let mut book_readed_size = 0;
-    let mut book_parsed_size = 0;
-    let mut error_count = 0;
-    let mut warning_count = 0;
-    let mut need_commit = false;
-    let mut time_to_unzip = Duration::default();
-    let mut time_to_parse = Duration::default();
-    let mut time_to_image = Duration::default();
-    let mut time_to_index = Duration::default();
-    let mut time_to_commit = Duration::default();
 
     if !delta {
         println!("{}", tr!["deleting index...", "очищаем индекс..."]);
         book_writer.delete_all_books().unwrap();
     }
 
-    for entry in zip_files {
-        if canceled.load(Ordering::SeqCst) {
-            break;
+    let (zippart_send, zippart_recv) = crossbeam_channel::unbounded::<ZipPart>();
+    let (zipstat_send, zipstat_recv) = crossbeam_channel::unbounded::<ZipPartStats>();
+    let (file_send, file_recv) = crossbeam_channel::bounded::<Option<UnzippedFile>>(read_queue);
+    let (book_send, book_recv) = crossbeam_channel::bounded::<Option<ParsedBook>>(read_queue);
+    let unzip_wait_group = WaitGroup::new();
+    let parse_wait_group = WaitGroup::new();
+
+    //exit nicely if user press Ctrl+C
+    let canceled = Arc::new(AtomicBool::new(false));
+    let c = canceled.clone();
+    ctrlc::set_handler(move || {
+        eprintln!("Cancel indexing...");
+        c.store(true, Ordering::SeqCst);
+    })
+    .expect("Error setting Ctrl-C handler");
+
+    crossbeam_utils::thread::scope(|scope| {
+        let tt = Instant::now();
+
+        //single unzip distributor thread : zip-files -> zippart
+        let unzip_thread = {
+            let canceled = canceled.clone();
+            let indexed_books = &indexed_books;
+            scope.spawn(move |_| {
+                let mut zip_progress_size = 0;
+                let mut zip_queued = 0;
+                if debug {
+                    println!("start unzip distributor, files={}", zip_files.len());
+                }
+                for entry in zip_files {
+                    if canceled.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    let os_filename = &entry.file_name();
+                    let zip_size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                    let zip_progress_pct = zip_progress_size * 100 / zip_total_size;
+                    let zipfile = os_filename.to_str().expect("invalid filename");
+                    if let Some(indexed) = &indexed_books {
+                        if let Some(files) = indexed.get(zipfile) {
+                            if files.contains(crate::fts::WHOLE_MARKER) {
+                                println!(
+                                    "[{}/{}] {} {}",
+                                    zip_queued,
+                                    zip_total_count,
+                                    tr!["skip archive", "пропускаем архив"],
+                                    &zipfile
+                                );
+                                zip_progress_size += zip_size;
+                                continue;
+                            }
+                        }
+                    }
+                    println!(
+                        "[{}/{}={}%] {} {}",
+                        zip_queued,
+                        zip_total_count,
+                        zip_progress_pct,
+                        tr!["read archive", "читаем архив"],
+                        &zipfile
+                    );
+                    let reader = std::fs::File::open(&entry.path()).unwrap();
+                    //let reader = std::io::BufReader::with_capacity(READ_BUFFER_SIZE, reader);
+                    let zip = zip::ZipArchive::new(reader).unwrap();
+                    let files_count = zip.len();
+                    //assume large zip-file with many books inside, 1-3 MB each
+                    //reopen zip and read different parts in multiple threads
+                    let read_threads = if files_count <= read_threads {
+                        1
+                    } else {
+                        read_threads
+                    };
+                    let chunk_size = files_count / read_threads;
+                    let mut first_idx = 0;
+                    let mut last_idx = chunk_size;
+                    for i in (0..read_threads).rev() {
+                        if i == 0 {
+                            last_idx = files_count
+                        }
+                        let zip_part = ZipPart {
+                            path: entry.path(),
+                            zipfile: zipfile.to_string(),
+                            first_idx,
+                            last_idx,
+                            pct: zip_progress_pct,
+                            total_files: files_count as u64,
+                        };
+                        if zippart_send.send(zip_part).is_err() { break }
+                        first_idx += chunk_size;
+                        last_idx += chunk_size;
+                    }
+                    zip_queued += 1;
+                    zip_progress_size += zip_size;
+                }
+                drop(zippart_send);
+                if debug {
+                    println!("stop unzip distributor");
+                }
+            })
+        };
+
+        //worker unzip threads : zippart -> file | skipped-book
+        for thread in 0..read_threads {
+            let canceled = canceled.clone();
+            let unzip_wait_group = unzip_wait_group.clone();
+            let zippart_recv = zippart_recv.clone();
+            let zipstat_send = zipstat_send.clone();
+            let book_send = book_send.clone();
+            let file_send = file_send.clone();
+            let indexed_books = &indexed_books;
+            scope.spawn(move |_| {
+                if debug {
+                    println!("z#{} start", thread);
+                }
+                for zip_part in zippart_recv.iter() {
+                    if canceled.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    if debug {
+                        println!("z#{}: {:?}", thread, zip_part);
+                    }
+                    let zipfile = &zip_part.zipfile;
+                    let mut stats = ZipPartStats {
+                        zipfile: zipfile.clone(),
+                        ..Default::default()
+                    };
+                    let zt = Instant::now();
+                    let reader = std::fs::File::open(&zip_part.path).unwrap();
+                    let mut zip = zip::ZipArchive::new(reader).unwrap();
+                    stats.time_to_unzip += zt.elapsed();
+                    for i in zip_part.first_idx..zip_part.last_idx {
+                        if canceled.load(Ordering::SeqCst) {
+                            break;
+                        }
+                        let mut file = zip.by_index(i).unwrap();
+                        stats.packed_size += file.compressed_size();
+                        let filename: String = match decode_filename(file.name_raw()) {
+                            Some(s) => s,
+                            None => file.name().into(),
+                        };
+                        if debug {
+                            println!(
+                                "z#{} [{}%] {}/{}",
+                                thread, zip_part.pct, &zipfile, &filename
+                            );
+                        }
+                        if let Some(indexed) = &indexed_books {
+                            if let Some(files) = indexed.get(zipfile) {
+                                if files.contains(&filename) {
+                                    println!("  {} {}", &filename, tr!["indexed", "индексирован"]);
+                                    let book = ParsedBook {
+                                        zipfile: zipfile.to_string(),
+                                        filename,
+                                        state: BookState::Skipped,
+                                        total_files: zip_part.total_files,
+                                        ..Default::default()
+                                    };
+                                    if book_send.send(Some(book)).is_err() { break }
+                                    continue;
+                                }
+                            }
+                        }
+                        let zt = Instant::now();
+                        let mut data = Vec::with_capacity(file.size() as usize);
+                        let file = file.read_to_end(&mut data);
+                        stats.time_to_unzip += zt.elapsed();
+                        match file {
+                            Ok(_) => {
+                                let file = UnzippedFile {
+                                    zipfile: zipfile.clone(),
+                                    filename,
+                                    data,
+                                    pct: zip_part.pct,
+                                    total_files: zip_part.total_files,
+                                };
+                                if file_send.send(Some(file)).is_err() { break }
+                            }
+                            Err(e) => {
+                                eprintln!("error reading {}/{}: {}", &zipfile, &filename, e);
+                                stats.error_count += 1;
+                            }
+                        }
+                    }
+                    if zipstat_send.send(stats).is_err() { break }
+                }
+                if debug {
+                    println!("z#{} stop", thread);
+                }
+                //end-signal to parse thread
+                file_send.send(None).ok();
+                drop(zipstat_send);
+                drop(file_send);
+                drop(book_send);
+                drop(unzip_wait_group);
+            });
         }
-        let os_filename = &entry.file_name();
-        let zip_size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-        let zip_progress_pct = zip_progress_size * 100 / zip_total_size;
-        let zipfile = &os_filename.to_str().expect("invalid filename");
-        if delta && files.is_empty() {
-            if let Ok(true) = book_writer.is_book_indexed(&zipfile, "WHOLE") {
-                println!(
-                    "[{}/{}] {} {}",
-                    zip_index,
-                    zip_count,
-                    tr!["skip archive", "пропускаем архив"],
-                    &zipfile
-                );
-                zip_progress_size += zip_size;
-                continue;
-            }
+        drop(zipstat_send);
+        drop(zippart_recv);
+
+        //worker threads (book parsing + image processing) : file -> book
+        for thread in 0..read_threads {
+            let book_send = book_send.clone();
+            let file_recv = file_recv.clone();
+            let parse_wait_group = parse_wait_group.clone();
+            let canceled = canceled.clone();
+            let opts = opts.clone();
+            scope.spawn(move |_| {
+                if debug {
+                    println!("p#{} start", thread);
+                }
+                for file in file_recv.iter() {
+                    if canceled.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    if let Some(file) = file {
+                        if debug {
+                            println!(
+                                "p#{} [{}%] parse {}/{}",
+                                thread, file.pct, &file.zipfile, &file.filename
+                            );
+                        }
+                        let book = process_file(file, lang_filter, &book_formats, &opts, debug);
+                        if book_send.send(Some(book)).is_err() { break }
+                    }
+                    else { 
+                        break 
+                    }
+                }
+                if debug {
+                    println!("p#{} stop", thread);
+                }
+                drop(book_send);
+                drop(parse_wait_group);
+            });
         }
-        println!(
-            "[{}/{}={}%] {} {}",
-            zip_index,
-            zip_count,
-            zip_progress_pct,
-            tr!["read archive", "читаем архив"],
-            &zipfile
-        );
-        //enforce reindex of books inside specified archive
-        let skip_indexed = if files.is_empty() { delta } else { false };
+        drop(book_send);
+        drop(file_recv);
+
+        //main thread : book -> index, commit, join unzip threads, join parse threads
+        let mut book_indexed = 0;
+        let mut book_ignored = 0;
+        let mut book_skipped = 0;
+        let mut packed_size = 0;
+        let mut book_readed_size = 0;
+        let mut book_parsed_size = 0;
+        let mut error_count = 0;
+        let mut warning_count = 0;
+        let mut time_to_unzip = Duration::default();
+        let mut time_to_parse = Duration::default();
+        let mut time_to_image = Duration::default();
+        let mut time_to_commit = Duration::default();
         let mut running_indexed_size: usize = 0;
-        let zt = Instant::now();
-        let reader = std::fs::File::open(&entry.path()).unwrap();
-        //let reader = std::io::BufReader::with_capacity(READ_BUFFER_SIZE, reader);
-        let mut zip = zip::ZipArchive::new(reader).unwrap();
-        let files_count = zip.len();
-        time_to_unzip += zt.elapsed();
-        for i in 0..files_count {
+        let mut processed_files: HashMap<String, (u64, u64)> = HashMap::new(); //zipfile->(total,indexed)
+
+        for book in book_recv.iter() {
             if canceled.load(Ordering::SeqCst) {
                 break;
             }
-            let zt = Instant::now();
-            let mut file = zip.by_index(i).unwrap();
-            let filename: String = match decode_filename(file.name_raw()) {
-                Some(s) => s,
-                None => file.name().into(),
-            };
-            if opts.debug {
-                println!(
-                    "[{}%] {}/{}",
-                    zip_progress_pct, &zipfile, &filename
-                );
+            if let Some(book) = book {
+            if debug {
+                println!("  {}/{} -> {}", book.zipfile, book.filename, book.state);
             }
-            let mut data = Vec::with_capacity(file.size() as usize);
-            let file = file.read_to_end(&mut data);
-            time_to_unzip += zt.elapsed();
-            match file {
-                Ok(_) => {
-                    let stats = process_file(
-                        &zipfile,
-                        &filename,
-                        data.as_ref(),
-                        &mut book_writer,
-                        lang_filter,
-                        &opts,
-                        skip_indexed,
-                    );
-                    if stats.is_book {
-                        book_count += 1
-                    }
-                    if stats.skipped {
-                        book_skipped += 1
-                    }
-                    if stats.ignored {
-                        book_ignored += 1
-                    }
-                    if stats.indexed {
-                        book_indexed += 1;
-                        need_commit = true;
-                    }
-                    error_count += stats.error_count;
-                    warning_count += stats.warning_count;
-                    book_readed_size += stats.readed_size;
-                    book_parsed_size += stats.parsed_size;
-                    time_to_parse += stats.time_to_parse;
-                    time_to_image += stats.time_to_image;
-                    time_to_index += stats.time_to_index;
-                    running_indexed_size += stats.indexed_size;
-                    if running_indexed_size > batch_size {
-                        running_indexed_size = 0;
-                        if opts.debug {
-                            println!("Batch commit: start");
+            let mut indexed = 0;
+            match book.state {
+                BookState::Invalid => (),
+                BookState::Skipped => book_skipped += 1,
+                BookState::Ignored => book_ignored += 1,
+                BookState::Valid(b) => {
+                    match book_writer.add_book(
+                        &book.zipfile,
+                        &book.filename,
+                        b,
+                        &genre_map,
+                        opts.body,
+                        opts.xbody,
+                    ) {
+                        Ok(_) => {
+                            book_indexed += 1;
+                            running_indexed_size += book.parsed_size;
+                            indexed = 1;
                         }
-                        let ct = Instant::now();
-                        book_writer.commit().unwrap();
-                        time_to_commit += ct.elapsed();
-                        if opts.debug {
-                            println!("Batch commit: done");
+                        Err(e) => {
+                            error_count += 1;
+                            eprintln!(
+                                "{}/{} -> {} {}",
+                                book.zipfile,
+                                book.filename,
+                                tr!["indexing error", "ошибка индексации"],
+                                e
+                            );
+                            //and continue
                         }
                     }
                 }
-                Err(e) => {
-                    eprintln!(
-                        "error reading {}/{}: {}",
-                        &zipfile, &filename, e
-                    );
-                    error_count += 1;
+            }
+            processed_files
+                .entry(book.zipfile.clone())
+                .and_modify(|x| {
+                    (*x).0 += 1;
+                    (*x).1 += indexed;
+                })
+                .or_insert((1, indexed));
+            //mark whole archives as indexed when all files are done
+            if let Some((processed,indexed)) = processed_files.get(&book.zipfile) {
+                if *processed == book.total_files {
+                    if debug {
+                        println!("mark {} as indexed", book.zipfile);
+                    }
+                    book_writer
+                        .mark_zipfile_as_indexed(&book.zipfile, *indexed)
+                        .unwrap();
                 }
             }
-        }
-        //mark whole archive as indexed
-        if !canceled.load(Ordering::SeqCst) {
-            book_writer
-                .add_file_record(&zipfile, "WHOLE", book_indexed)
-                .unwrap(); 
-        }       
-        if need_commit {
-            if opts.debug {
-                println!("Commit: start");
+            error_count += book.error_count;
+            warning_count += book.warning_count;
+            book_readed_size += book.readed_size;
+            book_parsed_size += book.parsed_size;
+            time_to_parse += book.time_to_parse;
+            time_to_image += book.time_to_image;
+            if running_indexed_size > batch_size {
+                running_indexed_size = 0;
+                if debug {
+                    println!("Batch commit: start");
+                }
+                let ct = Instant::now();
+                book_writer.commit().unwrap();
+                time_to_commit += ct.elapsed();
+                if debug {
+                    println!("Batch commit: done");
+                }
             }
-            let ct = Instant::now();
-            book_writer.commit().unwrap();
-            time_to_commit += ct.elapsed();
-            if opts.debug {
-                println!("Commit: done");
             }
+            else { break }
         }
-        zip_index += 1;
-        zip_progress_size += zip_size;
-        zip_processed_size += zip_size;
-    }
-    if canceled.load(Ordering::SeqCst) {
-        println!("{}", tr!["Indexing canceled", "Индексация прервана"]);
-    } else {
-        println!("{}", tr!["Indexing done", "Индексация завершена"]);
-    }
-    let total = tt.elapsed().as_millis() + 1;
-    println!(
-        "{}: {}/{} = {}/{} MB",
-        tr!["Archives", "Архивов"],
-        zip_index,
-        zip_count,
-        zip_processed_size / 1024 / 1024,
-        zip_total_size / 1024 / 1024,
-    );
-    println!(
-        "{}: {}/{} : {} {}, {} {} = {} {} / {} {}",
-        tr!["Books", "Книг"],
-        book_indexed,
-        book_count,
-        book_ignored,
-        tr!["ignored", "проигнорировано"],
-        book_skipped,
-        tr!["skipped", "пропущено"],
-        book_parsed_size / 1024 / 1024,
-        tr!["MB indexed", "МБ проиндексировано"],
-        book_readed_size / 1024 / 1024,
-        tr!["MB readed", "МБ прочитано"],
-    );
-    println!(
-        "{}: {} {}: {} MB/s",
-        tr!["Duration", "Длительность"],
-        format_duration(total),
-        tr!["Average speed", "Средняя скорость"],
-        (book_readed_size as u128) / total * 1000 / 1024 / 1024,
-    );
-    println!(
-        "{}: {}, {}: {}",
-        tr!["Errors", "Ошибок"],
-        error_count,
-        tr!["Warnings", "Предупреждений"],
-        warning_count,
-    );
-    if app.debug {
-        let ue = time_to_unzip.as_millis();
-        let pe = time_to_parse.as_millis();
-        let ie = time_to_image.as_millis();
-        let xe = time_to_index.as_millis();
-        let ce = time_to_commit.as_millis();
+
+        if debug {
+            println!("stopping...");
+        }
+
+        if debug {
+            println!("unzip_thread.join");
+        }
+        unzip_thread.join().ok();
+
+        if debug {
+            println!("unzip_wait_group.wait");
+        }
+        unzip_wait_group.wait();
+        if debug {
+            println!("collect zip statistics");
+        }
+        let mut uniq_zipfile = HashSet::new();
+        for s in zipstat_recv.try_iter() {
+            uniq_zipfile.insert(s.zipfile);
+            packed_size += s.packed_size;
+            time_to_unzip += s.time_to_unzip;
+            error_count += s.error_count;
+        }
+        drop(zipstat_recv);
+        let zip_processed = uniq_zipfile.len();
+
+        //empty messages to stop parse threads
+        if debug {
+            println!("stopping read threads");
+        }
+        for _ in 0..read_threads {
+            file_send.try_send(None).unwrap_or_default();
+        }
+
+        if debug {
+            println!("parse_wait_group.wait");
+        }
+        parse_wait_group.wait();
+
+        if debug {
+            println!("Commit: start");
+        }
+        let ct = Instant::now();
+        book_writer.commit().unwrap();
+        time_to_commit += ct.elapsed();
+        if debug {
+            println!("Commit: done, waiting for merging threads");
+        }
+        book_writer.wait_merging_threads().unwrap();
+
+        let total = tt.elapsed().as_millis() + 1;
+        let canceled = canceled.load(Ordering::SeqCst);
+        if canceled {
+            println!("{}", tr!["Indexing canceled", "Индексация прервана"]);
+        } else {
+            println!("{}", tr!["Indexing done", "Индексация завершена"]);
+        }
+
         println!(
-            "unpacking {}%, parse {}%, image resize {}%,index {}%, commit {}%",
-            ue * 100 / total,
-            pe * 100 / total,
-            ie * 100 / total,
-            xe * 100 / total,
-            ce * 100 / total,
+            "{}: {}/{} = {}/{} MB",
+            tr!["Archives", "Архивов"],
+            zip_processed,
+            zip_total_count,
+            packed_size / 1024 / 1024,
+            zip_total_size / 1024 / 1024,
         );
-    }
+        println!(
+            "{}: {} {}: {} {}, {} {} = {} {} / {} {}",
+            tr!["Books", "Книг"],
+            book_indexed,
+            tr!["added", "добавлено"],
+            book_ignored,
+            tr!["ignored", "проигнорировано"],
+            book_skipped,
+            tr!["skipped", "пропущено"],
+            book_parsed_size / 1024 / 1024,
+            tr!["MB indexed", "МБ проиндексировано"],
+            book_readed_size / 1024 / 1024,
+            tr!["MB readed", "МБ прочитано"],
+        );
+        println!(
+            "{}: {} {}: {} MB/s",
+            tr!["Duration", "Длительность"],
+            format_duration(total),
+            tr!["Average speed", "Средняя скорость"],
+            (book_readed_size as u128) / total * 1000 / 1024 / 1024,
+        );
+        println!(
+            "{}: {}, {}: {}",
+            tr!["Errors", "Ошибок"],
+            error_count,
+            tr!["Warnings", "Предупреждений"],
+            warning_count,
+        );
+        if debug {
+            let ue = time_to_unzip.as_millis() / read_threads as u128;
+            let pe = time_to_parse.as_millis() / read_threads as u128;
+            let ie = time_to_image.as_millis() / read_threads as u128;
+            let ce = time_to_commit.as_millis();
+            println!(
+                "unpacking {}%, parse {}%, image resize {}%, commit {}%",
+                ue * 100 / total,
+                pe * 100 / total,
+                ie * 100 / total,
+                ce * 100 / total,
+            );
+        }
+    })
+    .unwrap(); //scope
 }
 
 // extract number from string and left-pad it
@@ -439,46 +742,39 @@ fn is_zip_file(entry: &DirEntry) -> bool {
 }
 
 fn process_file<F>(
-    zipfile: &str,
-    filename: &str,
-    data: &[u8],
-    book_writer: &mut BookWriter,
+    file: UnzippedFile,
     lang_filter: F,
+    book_formats: &BookFormats,
     opts: &ParseOpts,
-    skip_indexed: bool,
-) -> ParsedFileStats
+    debug: bool,
+) -> ParsedBook
 where
     F: Fn(&str) -> bool,
 {
-    let mut stats = ParsedFileStats::default();
-    let ext = file_extension(&filename);
-    if let Some(book_format) = opts.book_formats.get(&ext.as_ref()) {
+    let mut res = ParsedBook {
+        zipfile: file.zipfile.clone(),
+        filename: file.filename.clone(),
+        total_files: file.total_files,
+        ..Default::default()
+    };
+    let ext = file_extension(&file.filename);
+    if let Some(book_format) = book_formats.get(&ext.as_ref()) {
         //filter eBook by extension
-        stats.is_book = true;
-        if skip_indexed {
-            if let Ok(true) = book_writer.is_book_indexed(&zipfile, &filename) {
-                println!("  {} {}", &filename, tr!["indexed", "индексирован"]);
-                stats.skipped = true;
-                return stats;
-            }
-        }
-        stats.readed_size = data.len(); //uncompressed book size with embedded images
-        let mut buf_file = std::io::Cursor::new(data);
+        res.readed_size = file.data.len(); //uncompressed book size with embedded images
+        let mut buf_file = std::io::Cursor::new(file.data);
         let pt = Instant::now();
         let parsed_book = book_format.parse(
-            &zipfile,
-            &filename,
             &mut buf_file,
             opts.body || opts.xbody,
             opts.annotation,
             opts.cover,
         );
-        stats.time_to_parse = pt.elapsed();
+        res.time_to_parse = pt.elapsed();
         match parsed_book {
             Ok(mut b) => {
-                stats.warning_count += b.warning.len();
-                if opts.debug {
-                    println!("    -> {}", &b)
+                res.warning_count += b.warning.len();
+                if debug {
+                    println!("  {}/{} -> {}", file.zipfile, file.filename, &b)
                 }
                 let lang = if !b.lang.is_empty() { &b.lang[0] } else { "" };
                 if lang_filter(&lang) {
@@ -493,58 +789,44 @@ where
                             Err(e) => {
                                 eprintln!(
                                     "{}/{} -> {} {}",
-                                    zipfile,
-                                    filename,
+                                    file.zipfile,
+                                    file.filename,
                                     tr!["image resize error", "ошибка изображения"],
                                     e
                                 );
-                                stats.warning_count += 1;
+                                res.warning_count += 1;
                                 b.cover_image = None;
                             }
                         }
-                        stats.time_to_image = it.elapsed();
+                        res.time_to_image = it.elapsed();
                     }
-                    stats.parsed_size = b.size_of(); //metadata + plain text + cover image
+                    res.parsed_size = b.size_of(); //metadata + plain text + cover image
                     if !opts.body && !opts.xbody {
-                        b.length = stats.parsed_size as u64;
+                        b.length = res.parsed_size as u64;
                     }
-                    stats.indexed_size = match b.body {
+                    res.content_size = match b.body {
                         Some(ref x) => x.len(),
                         None => 0,
                     };
-                    let it = Instant::now();
-                    match book_writer.add_book(b, opts.genre_map, opts.body, opts.xbody) {
-                        Ok(_) => stats.indexed = true,
-                        Err(e) => {
-                            stats.error_count += 1;
-                            eprintln!(
-                                "{}/{} -> {} {}",
-                                zipfile,
-                                filename,
-                                tr!["indexing error", "ошибка индексации"],
-                                e
-                            )
-                            //and continue
-                        }
-                    }
-                    stats.time_to_index = it.elapsed();
+                    res.state = BookState::Valid(b);
                 } else {
-                    stats.ignored = true;
+                    res.state = BookState::Ignored;
                     println!(
                         "{}/{} -> {} {}",
-                        zipfile,
-                        filename,
+                        file.zipfile,
+                        file.filename,
                         tr!["ignore lang", "игнорируем язык"],
                         lang
                     );
                 }
             }
             Err(e) => {
-                stats.error_count += 1;
+                res.state = BookState::Invalid;
+                res.error_count += 1;
                 eprintln!(
                     "{}/{} -> {} {}",
-                    zipfile,
-                    filename,
+                    file.zipfile,
+                    file.filename,
                     tr!["parse error", "ошибка разбора"],
                     e
                 );
@@ -552,5 +834,5 @@ where
             }
         }
     }
-    stats
+    res
 }

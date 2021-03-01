@@ -150,6 +150,24 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         ]),
                 )
                 .arg(
+                    Arg::with_name("read-threads")
+                        .short("r")
+                        .long("read-threads")
+                        .takes_value(true)
+                        .value_name("number")
+                        .default_value("1")
+                        .help(tr!["Number of read workers", "Число потоков чтения"]),
+                )
+                .arg(
+                    Arg::with_name("read-queue")
+                        .short("q")
+                        .long("read-queue")
+                        .takes_value(true)
+                        .value_name("number")
+                        .default_value("64")
+                        .help(tr!["Size of read queue", "Размер очереди чтения"]),
+                )
+                .arg(
                     Arg::with_name("with-body")
                         .long("with-body")
                         .help(tr![
@@ -329,18 +347,20 @@ fn main() {
             }
         }
     }
-    let index_path = index_path.canonicalize().unwrap_or_else(|_| {
+    /* DON'T WORK ON WINDOWS WITH DIRECTORY SYMLINK!!!
+    let index_path = index_path.canonicalize().unwrap_or_else(|e| {
         eprintln!(
-            "{}: {}\n{}",
+            "{}: {}\n{}\n{}",
             tr!["Not found index directory", "Не найден индексный каталог"],
             index_path.display(),
+            e,
             tr![
                 "Run 'index' command or use --index-dir option",
                 "Запустите команду 'index' или укажите путь опцией --index-dir"
             ],
         );
         std::process::exit(1);
-    });
+    });*/
 
     let mut index_settings = IndexSettings::load(&index_path, debug).unwrap_or_else(|e| {
         eprintln!("{}", e);

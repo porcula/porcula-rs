@@ -49,7 +49,7 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
         &listen_addr
     );
 
-    #[allow(clippy::cognitive_complexity)]
+    #[allow(clippy::cognitive_complexity, clippy::manual_strip)]
     rouille::start_server(&listen_addr, move |req| {
         if app.debug {
             println!("req {}", req.raw_url())
@@ -559,7 +559,7 @@ fn opds_facet(
                     (path, count, title)
                 })
                 .collect::<Vec<(String, u64, String)>>();
-            arr.sort_by_cached_key(|(_p, _c, t)| LocalString ( t.to_owned() ));
+            arr.sort_by_cached_key(|(_p, _c, t)| LocalString(t.to_owned()));
             let mut e = Vec::new();
             let updated = chrono::Utc::now();
             for (path, count, title) in arr {

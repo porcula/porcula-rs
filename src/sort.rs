@@ -9,10 +9,10 @@ lazy_static! {
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct LocalStr <'a> (pub &'a str);
+pub struct LocalStr<'a>(pub &'a str);
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct LocalString (pub String);
+pub struct LocalString(pub String);
 
 impl Ord for LocalStr<'_> {
     fn cmp(&self, other: &Self) -> Ordering {

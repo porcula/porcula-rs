@@ -1,6 +1,6 @@
 use rand::Rng;
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use tantivy::collector::{Count, FacetCollector, TopDocs};
 use tantivy::query::{
@@ -16,6 +16,7 @@ use crate::sort::LocalString;
 const MAX_MATCHES_BEFORE_ORDERING: usize = 10000;
 const SIMPLE_TOKENIZER_NAME: &str = "p_simple";
 const STEMMED_TOKENIZER_NAME: &str = "p_stemmed";
+pub const WHOLE_MARKER: &str = "WHOLE";
 
 type Result<T> = tantivy::Result<T>;
 
@@ -58,12 +59,13 @@ pub struct BookMeta {
     pub annotation: Option<String>,
 }
 
+pub type IndexedBooks = HashMap<String, HashSet<String>>; //zipfile->{filenames}
+
 #[allow(dead_code)]
 pub struct BookWriter {
     schema: Schema,
     index: Index,
     writer: IndexWriter,
-    reader: IndexReader,
     fields: Fields,
     use_stemmer: bool,
 }
@@ -213,13 +215,11 @@ impl BookWriter {
             Some(n) if n > 0 => index.writer_with_num_threads(n, heap_size)?,
             _ => index.writer(heap_size)?,
         };
-        let reader = index.reader()?;
 
         Ok(BookWriter {
             writer,
             index,
             schema,
-            reader,
             fields,
             use_stemmer: stemmer != "OFF",
         })
@@ -231,36 +231,78 @@ impl BookWriter {
         Ok(())
     }
 
-    pub fn is_book_indexed(&self, zipfile: &str, filename: &str) -> Result<bool> {
-        let facet_term = Term::from_facet(self.fields.facet, &file_facet(zipfile, filename));
-        let query = TermQuery::new(facet_term, IndexRecordOption::Basic);
-        let searcher = self.reader.searcher();
-        let found = searcher.search(&query, &Count)?;
-        if found > 0 {
-            Ok(true)
-        } else {
-            Ok(false)
-        }
-    }
-
-    pub fn add_file_record(&mut self, zipfile: &str, filename: &str, count: u64) -> Result<()> {
+    pub fn mark_zipfile_as_indexed(&mut self, zipfile: &str, count: u64) -> Result<()> {
         let mut doc = Document::default();
-        doc.add_facet(self.fields.facet, file_facet(zipfile, filename)); //facet field is mandatory
+        let facet = Facet::from_path(vec![WHOLE_MARKER, zipfile]);
+        doc.add_facet(self.fields.facet, facet);
         doc.add_u64(self.fields.length, count); //books count
         self.writer.add_document(doc);
         Ok(())
     }
 
+    pub fn get_indexed_books(&self) -> Result<IndexedBooks> {
+        let mut res = HashMap::new();
+        let reader = self.index.reader()?;
+        let searcher = reader.searcher();
+        //collect whole zipfiles
+        let mut facet_collector = FacetCollector::for_field(self.fields.facet);
+        let whole_facet = Facet::from_path(vec![WHOLE_MARKER]);
+        facet_collector.add_facet(whole_facet.clone());
+        let facet_counts = searcher.search(&AllQuery, &facet_collector)?;
+        for (zip_facet, _) in facet_counts.get(whole_facet) {
+            let path = zip_facet.to_path(); //0='WHOLE',1=zipfile
+            if path.len() < 2 {
+                continue;
+            }
+            let zipfile = path[1].to_string();
+            let mut hs = HashSet::new();
+            hs.insert(WHOLE_MARKER.to_owned());
+            res.insert(zipfile, hs);
+        }
+        //collect partial zipfiles
+        let mut facet_collector = FacetCollector::for_field(self.fields.facet);
+        let root_facet = Facet::from_path(vec!["file"]);
+        facet_collector.add_facet(root_facet.clone());
+        let facet_counts = searcher.search(&AllQuery, &facet_collector)?;
+        for (zip_facet, _) in facet_counts.get(root_facet) {
+            let path = zip_facet.to_path(); //0='file',1=zipfile
+            if path.len() < 2 {
+                continue;
+            }
+            let zipfile = path[1].to_string();
+            if res.contains_key(&zipfile) {
+                continue;
+            }
+            let mut hs = HashSet::new();
+            let term = Term::from_facet(self.fields.facet, zip_facet);
+            let query = TermQuery::new(term, IndexRecordOption::Basic);
+            let mut facet_collector = FacetCollector::for_field(self.fields.facet);
+            facet_collector.add_facet(zip_facet.clone());
+            let facet_counts = searcher.search(&query, &facet_collector)?;
+            for (file_facet, _) in facet_counts.get(zip_facet.clone()) {
+                let path = file_facet.to_path(); //0='file',1=zipfile,2=filename
+                if path.len() < 3 {
+                    continue;
+                }
+                hs.insert(path[2].to_owned());
+            }
+            res.insert(zipfile, hs);
+        }
+        Ok(res)
+    }
+
     #[allow(clippy::cognitive_complexity)]
     pub fn add_book(
         &mut self,
+        zipfile: &str,
+        filename: &str,
         book: crate::types::Book,
         genre_map: &crate::genre_map::GenreMap,
         body: bool,
-        xbody: bool
+        xbody: bool,
     ) -> Result<()> {
         let mut doc = Document::default();
-        doc.add_facet(self.fields.facet, file_facet(&book.zipfile, &book.filename)); //facet field is mandatory
+        doc.add_facet(self.fields.facet, file_facet(zipfile, filename)); //facet field is mandatory
         doc.add_text(self.fields.encoding, &book.encoding);
         doc.add_u64(self.fields.length, book.length);
         if let Some(id) = &book.id {
@@ -369,6 +411,11 @@ impl BookWriter {
 
     pub fn commit(&mut self) -> Result<()> {
         self.writer.commit()?;
+        Ok(())
+    }
+
+    pub fn wait_merging_threads(self) -> Result<()> {
+        self.writer.wait_merging_threads()?;
         Ok(())
     }
 }
@@ -491,20 +538,18 @@ impl BookReader {
                 .collect();
             let mut offset = offset;
             match order {
-                "title" => all_docs.sort_by_cached_key(|d| LocalString (
-                    first_str(&d, self.fields.title).to_string()
-                )),
-                "author" => all_docs.sort_by_cached_key(|d| LocalString (
-                    joined_values(&d, self.fields.author).to_lowercase()
-                )),
-                "translator" => all_docs.sort_by_cached_key(|d| LocalString (
-                    joined_values(&d, self.fields.translator).to_lowercase()
-                )),
+                "title" => all_docs.sort_by_cached_key(|d| {
+                    LocalString(first_str(&d, self.fields.title).to_string())
+                }),
+                "author" => all_docs.sort_by_cached_key(|d| {
+                    LocalString(joined_values(&d, self.fields.author).to_lowercase())
+                }),
+                "translator" => all_docs.sort_by_cached_key(|d| {
+                    LocalString(joined_values(&d, self.fields.translator).to_lowercase())
+                }),
                 "sequence" => all_docs.sort_by_cached_key(|d| {
                     (
-                        LocalString (
-                            first_str(&d, self.fields.sequence).to_lowercase()
-                        ),
+                        LocalString(first_str(&d, self.fields.sequence).to_lowercase()),
                         first_i64_value(&d, self.fields.seqnum),
                     )
                 }),
@@ -618,8 +663,7 @@ impl BookReader {
         let searcher = self.reader.searcher();
         if let Some(doc_address) = self.find_book(&searcher, &zipfile, &filename)? {
             let segment_reader = searcher.segment_reader(doc_address.segment_ord());
-            if let Ok(bytes_reader) = segment_reader.fast_fields().bytes(self.fields.cover_image)
-            {
+            if let Ok(bytes_reader) = segment_reader.fast_fields().bytes(self.fields.cover_image) {
                 return Ok(Some(bytes_reader.get_bytes(doc_address.doc()).to_vec()));
             }
         }
