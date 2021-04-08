@@ -1,8 +1,7 @@
 use clap::ArgMatches;
+use rayon::prelude::*;
 use regex::Regex;
 use std::collections::HashSet;
-//use std::fmt::{Display, Formatter, Result};
-use rayon::prelude::*;
 use std::fs::DirEntry;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -52,7 +51,7 @@ enum BookState {
     Invalid,
     Ignored,
     WholeZip,
-    Valid(Book),
+    Valid(Box<Book>),
 }
 
 impl Default for BookState {
@@ -270,7 +269,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                         match book_writer.add_book(
                             &entry.zipfile,
                             &entry.filename,
-                            book,
+                            *book,
                             &genre_map,
                             opts_body,
                             opts_xbody,
@@ -441,7 +440,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                     }
                     stats
                 })
-                .reduce(|| ProcessStats::default(), |a, b| a + b);
+                .reduce(ProcessStats::default, |a, b| a + b);
             send_book
                 .send(ParsedBook {
                     state: BookState::WholeZip,
@@ -628,7 +627,7 @@ where
                     if !opts.body && !opts.xbody {
                         b.length = res.parsed_size as u64;
                     }
-                    res.state = BookState::Valid(b);
+                    res.state = BookState::Valid(Box::new(b));
                 } else {
                     res.state = BookState::Ignored;
                     println!(
