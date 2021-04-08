@@ -1,6 +1,6 @@
 [package]
 name = "porcula"
-version = "0.3.3"
+version = "0.3.4"
 authors = ["alexey.s.v.br@gmail.com"]
 edition = "2018"
 publish = false
@@ -31,5 +31,6 @@ clap = { version = "2.33", default-features = false }
 atom_syndication = "0.9"
 chrono = "0.4"
 percent-encoding = "2.1"
+rayon = "1.5.0"
 crossbeam-channel = "0.5"
-crossbeam-utils = "0.8"
+crossbeam-utils = "0.8.0"
