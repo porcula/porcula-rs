@@ -265,8 +265,9 @@
                 }
 
                 var cover_url = "defcover.png";
-                if (v("cover") != "0") {
-                    cover_url = "data:image/jpeg;base64," + btoa(String.fromCharCode.apply(null,v("cover_image")));
+                var cover_image = v("cover_image"); //jpeg in base64 | empty string
+                if (cover_image.length > 0) {
+                    cover_url = "data:image/jpeg;base64," + cover_image;
                 }
                 var row_class = "list" + (append && tab=='' ? " appended" : "");
                 tab += '<tr class="' + row_class + '">'

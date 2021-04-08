@@ -36,10 +36,9 @@ struct Fields {
     sequence: Field,
     seqnum: Field,
     annotation: Field,
-    body: Field,  //simple tokenizer
-    xbody: Field, //stemmed tokenizer
-    cover_image: Field,
-    cover: Field,
+    body: Field,        //simple tokenizer
+    xbody: Field,       //stemmed tokenizer
+    cover_image: Field, //jpeg in base64
 }
 
 #[derive(Debug)]
@@ -110,8 +109,7 @@ impl Fields {
             annotation: schema_builder.add_text_field("annotation", stored_text_opts),
             body: schema_builder.add_text_field("body", nonstored_simple_text_opts),
             xbody: schema_builder.add_text_field("xbody", nonstored_stemmed_text_opts),
-            cover_image: schema_builder.add_bytes_field("cover_image", FAST | STORED),
-            cover: schema_builder.add_u64_field("cover", STORED),
+            cover_image: schema_builder.add_text_field("cover_image", STORED),
         }
     }
 
@@ -139,7 +137,6 @@ impl Fields {
             body: load_field("body")?,
             xbody: load_field("xbody")?,
             cover_image: load_field("cover_image")?,
-            cover: load_field("cover")?,
         })
     }
 }
@@ -231,7 +228,7 @@ impl BookWriter {
         Ok(())
     }
 
-    pub fn mark_zipfile_as_indexed(&mut self, zipfile: &str, count: u64) -> Result<()> {
+    pub fn mark_zipfile_as_indexed(&self, zipfile: &str, count: u64) -> Result<()> {
         let mut doc = Document::default();
         let facet = Facet::from_path(vec![WHOLE_MARKER, zipfile]);
         doc.add_facet(self.fields.facet, facet);
@@ -293,7 +290,7 @@ impl BookWriter {
 
     #[allow(clippy::cognitive_complexity)]
     pub fn add_book(
-        &mut self,
+        &self,
         zipfile: &str,
         filename: &str,
         book: crate::types::Book,
@@ -400,10 +397,7 @@ impl BookWriter {
         }
         //consume book with image
         if let Some(raw) = book.cover_image {
-            doc.add_bytes(self.fields.cover_image, raw);
-            doc.add_u64(self.fields.cover, 1);
-        } else {
-            doc.add_u64(self.fields.cover, 0);
+            doc.add_text(self.fields.cover_image, base64::encode(raw));
         }
         self.writer.add_document(doc);
         Ok(())
@@ -656,18 +650,6 @@ impl BookReader {
         } else {
             Ok(None)
         }
-    }
-
-    pub fn get_cover(&self, zipfile: &str, filename: &str) -> Result<Option<Vec<u8>>> {
-        //->jpeg
-        let searcher = self.reader.searcher();
-        if let Some(doc_address) = self.find_book(&searcher, &zipfile, &filename)? {
-            let segment_reader = searcher.segment_reader(doc_address.segment_ord());
-            if let Ok(bytes_reader) = segment_reader.fast_fields().bytes(self.fields.cover_image) {
-                return Ok(Some(bytes_reader.get_bytes(doc_address.doc()).to_vec()));
-            }
-        }
-        Ok(None)
     }
 
     pub fn get_book_info(&self, zipfile: &str, filename: &str) -> Result<Option<(String, String)>> {
