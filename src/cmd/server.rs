@@ -171,10 +171,7 @@ fn handler_search(req: &Request, fts: &BookReader, debug: bool) -> Response {
 }
 
 fn handler_facet(req: &Request, fts: &BookReader, debug: bool) -> Response {
-    let hits: Option<usize> = match req.get_param("hits") {
-        Some(x) => Some(x.parse().unwrap_or(DEFAULT_QUERY_HITS)),
-        None => None,
-    };
+    let hits: Option<usize> = req.get_param("hits").map(|x| x.parse().unwrap_or(DEFAULT_QUERY_HITS));
     let req_query = req.get_param("query");
     let opt_query = match req_query {
         Some(ref s) if !s.is_empty() => Some(s.as_str()),

@@ -13,8 +13,8 @@ lto = "fat"
 [dependencies]
 zip = { version = "0.5", default-features = false, features = ["deflate"] }
 base64 = "0.13"
-regex = "1.4"
-rouille = { version = "3.0", default-features = false }
+regex = "1.5"
+rouille = { version = "3.1", default-features = false }
 rand = "0.8"
 chardet = "0.2"
 htmlescape = "0.3"
