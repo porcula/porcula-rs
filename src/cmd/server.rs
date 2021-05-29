@@ -87,6 +87,7 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
             (GET) (/book/{zipfile: String}/{filename: String}) => { handler_file(&req, &app, &zipfile, &filename) },
             (GET) (/book/{zipfile: String}/{filename: String}/{_saveas: String}) => { handler_file(&req, &app, &zipfile, &filename) },
             (GET) (/opensearch) => { handler_opensearch_xml(&req) },
+            (GET) (/file_list) => { handler_file_list(&req, &fts) },
             (GET) (/opds) => { opds_root(&req, &fts) },
             (GET) (/opds/search/{query: String}) => { opds_search_where(&req, &query) },
             (GET) (/opds/search/{query: String}/) => { opds_search_where(&req, &query) },
@@ -171,7 +172,9 @@ fn handler_search(req: &Request, fts: &BookReader, debug: bool) -> Response {
 }
 
 fn handler_facet(req: &Request, fts: &BookReader, debug: bool) -> Response {
-    let hits: Option<usize> = req.get_param("hits").map(|x| x.parse().unwrap_or(DEFAULT_QUERY_HITS));
+    let hits: Option<usize> = req
+        .get_param("hits")
+        .map(|x| x.parse().unwrap_or(DEFAULT_QUERY_HITS));
     let req_query = req.get_param("query");
     let opt_query = match req_query {
         Some(ref s) if !s.is_empty() => Some(s.as_str()),
@@ -183,6 +186,14 @@ fn handler_facet(req: &Request, fts: &BookReader, debug: bool) -> Response {
             Err(e) => Response::text(e.to_string()).with_status_code(500),
         },
         None => Response::empty_404(),
+    }
+}
+
+fn handler_file_list(_req: &Request, fts: &BookReader) -> Response {
+    if let Ok(list) = fts.get_indexed_books(false) {
+        Response::json(&list)
+    } else {
+        Response::empty_404()
     }
 }
 

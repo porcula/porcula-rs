@@ -216,7 +216,8 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
             if debug {
                 println!("loading list of indexed files");
             }
-            Some(book_writer.get_indexed_books().unwrap()) //read ALL indexed file names as two-level hash: zipfile->{filenames}
+            let book_reader = app.open_book_reader().unwrap();
+            Some(book_reader.get_indexed_books(true).unwrap()) //read ALL indexed file names as two-level hash: zipfile->{filenames}
         }
         false => None,
     };
@@ -433,7 +434,13 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                             match parsed_book.state {
                                 BookState::Invalid => stats.error_count += 1,
                                 BookState::Ignored => stats.book_ignored += 1,
-                                BookState::Valid(_) => send_book.send(parsed_book).unwrap(),
+                                BookState::Valid(_) => {
+                                    send_book.send(parsed_book).unwrap_or_else(|e| {
+                                        if !canceled.load(Ordering::SeqCst) {
+                                            panic!("Error queueing book to index: {}", e);
+                                        }
+                                    })
+                                }
                                 _ => (),
                             }
                         }
@@ -441,14 +448,16 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                     stats
                 })
                 .reduce(ProcessStats::default, |a, b| a + b);
-            send_book
-                .send(ParsedBook {
-                    state: BookState::WholeZip,
-                    zipfile: zipfile.to_string(),
-                    parsed_size: zip_stats.book_total,
-                    ..Default::default()
-                })
-                .unwrap();
+            if !canceled.load(Ordering::SeqCst) {
+                send_book
+                    .send(ParsedBook {
+                        state: BookState::WholeZip,
+                        zipfile: zipfile.to_string(),
+                        parsed_size: zip_stats.book_total,
+                        ..Default::default()
+                    })
+                    .unwrap();
+            }
             gstats = gstats + zip_stats;
         }
         drop(send_book);

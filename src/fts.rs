@@ -237,57 +237,6 @@ impl BookWriter {
         Ok(())
     }
 
-    pub fn get_indexed_books(&self) -> Result<IndexedBooks> {
-        let mut res = HashMap::new();
-        let reader = self.index.reader()?;
-        let searcher = reader.searcher();
-        //collect whole zipfiles
-        let mut facet_collector = FacetCollector::for_field(self.fields.facet);
-        let whole_facet = Facet::from_path(vec![WHOLE_MARKER]);
-        facet_collector.add_facet(whole_facet.clone());
-        let facet_counts = searcher.search(&AllQuery, &facet_collector)?;
-        for (zip_facet, _) in facet_counts.get(whole_facet) {
-            let path = zip_facet.to_path(); //0='WHOLE',1=zipfile
-            if path.len() < 2 {
-                continue;
-            }
-            let zipfile = path[1].to_string();
-            let mut hs = HashSet::new();
-            hs.insert(WHOLE_MARKER.to_owned());
-            res.insert(zipfile, hs);
-        }
-        //collect partial zipfiles
-        let mut facet_collector = FacetCollector::for_field(self.fields.facet);
-        let root_facet = Facet::from_path(vec!["file"]);
-        facet_collector.add_facet(root_facet.clone());
-        let facet_counts = searcher.search(&AllQuery, &facet_collector)?;
-        for (zip_facet, _) in facet_counts.get(root_facet) {
-            let path = zip_facet.to_path(); //0='file',1=zipfile
-            if path.len() < 2 {
-                continue;
-            }
-            let zipfile = path[1].to_string();
-            if res.contains_key(&zipfile) {
-                continue;
-            }
-            let mut hs = HashSet::new();
-            let term = Term::from_facet(self.fields.facet, zip_facet);
-            let query = TermQuery::new(term, IndexRecordOption::Basic);
-            let mut facet_collector = FacetCollector::for_field(self.fields.facet);
-            facet_collector.add_facet(zip_facet.clone());
-            let facet_counts = searcher.search(&query, &facet_collector)?;
-            for (file_facet, _) in facet_counts.get(zip_facet.clone()) {
-                let path = file_facet.to_path(); //0='file',1=zipfile,2=filename
-                if path.len() < 3 {
-                    continue;
-                }
-                hs.insert(path[2].to_owned());
-            }
-            res.insert(zipfile, hs);
-        }
-        Ok(res)
-    }
-
     #[allow(clippy::cognitive_complexity)]
     pub fn add_book(
         &self,
@@ -494,6 +443,61 @@ impl BookReader {
             fields,
             default_fields,
         })
+    }
+
+    /// Extract list of indexed files
+    /// compact==true: Get complete zipfiles plus books of incomplete zipfiles
+    /// compact==false: Get all books
+    pub fn get_indexed_books(&self, compact: bool) -> Result<IndexedBooks> {
+        let mut res = HashMap::new();
+        let searcher = self.reader.searcher();
+        if compact {
+            //collect whole zipfiles
+            let mut facet_collector = FacetCollector::for_field(self.fields.facet);
+            let whole_facet = Facet::from_path(vec![WHOLE_MARKER]);
+            facet_collector.add_facet(whole_facet.clone());
+            let facet_counts = searcher.search(&AllQuery, &facet_collector)?;
+            for (zip_facet, _) in facet_counts.get(whole_facet) {
+                let path = zip_facet.to_path(); //0='WHOLE',1=zipfile
+                if path.len() < 2 {
+                    continue;
+                }
+                let zipfile = path[1].to_string();
+                let mut hs = HashSet::new();
+                hs.insert(WHOLE_MARKER.to_owned());
+                res.insert(zipfile, hs);
+            }
+        }
+        //collect files
+        let mut facet_collector = FacetCollector::for_field(self.fields.facet);
+        let root_facet = Facet::from_path(vec!["file"]);
+        facet_collector.add_facet(root_facet.clone());
+        let facet_counts = searcher.search(&AllQuery, &facet_collector)?;
+        for (zip_facet, _) in facet_counts.get(root_facet) {
+            let path = zip_facet.to_path(); //0='file',1=zipfile
+            if path.len() < 2 {
+                continue;
+            }
+            let zipfile = path[1].to_string();
+            if res.contains_key(&zipfile) {
+                continue; //skip WHOLE marked zipfiles
+            }
+            let mut hs = HashSet::new();
+            let term = Term::from_facet(self.fields.facet, zip_facet);
+            let query = TermQuery::new(term, IndexRecordOption::Basic);
+            let mut facet_collector = FacetCollector::for_field(self.fields.facet);
+            facet_collector.add_facet(zip_facet.clone());
+            let facet_counts = searcher.search(&query, &facet_collector)?;
+            for (file_facet, _) in facet_counts.get(zip_facet.clone()) {
+                let path = file_facet.to_path(); //0='file',1=zipfile,2=filename
+                if path.len() < 3 {
+                    continue;
+                }
+                hs.insert(path[2].to_owned());
+            }
+            res.insert(zipfile, hs);
+        }
+        Ok(res)
     }
 
     pub fn count_all(&self) -> Result<usize> {
