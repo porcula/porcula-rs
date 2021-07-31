@@ -416,6 +416,6 @@ fn main() {
             Some(x) => x,
             None => &matches,
         };
-        run_server(&matches, app).unwrap();
+        run_server(matches, app).unwrap();
     }
 }

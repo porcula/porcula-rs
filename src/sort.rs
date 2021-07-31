@@ -35,7 +35,7 @@ impl Ord for LocalStr<'_> {
                     .filter(|c| c.is_alphanumeric() || c.is_whitespace())
                     .peekable();
                 match (ai.peek().is_some(), bi.peek().is_some()) {
-                    (false, false) => self.0.cmp(&other.0),
+                    (false, false) => self.0.cmp(other.0),
                     (false, true) => Ordering::Greater,
                     (true, false) => Ordering::Less,
                     (true, true) => {
@@ -44,10 +44,10 @@ impl Ord for LocalStr<'_> {
                                 continue;
                             }
                             return match (ORDER.get(&a), ORDER.get(&b)) {
-                                (Some(a2), Some(b2)) => a2.cmp(&b2),
+                                (Some(a2), Some(b2)) => a2.cmp(b2),
                                 (Some(_), None) => Ordering::Less,
                                 (None, Some(_)) => Ordering::Greater,
-                                (None, None) => self.0.cmp(&other.0),
+                                (None, None) => self.0.cmp(other.0),
                             };
                         }
                         Ordering::Equal

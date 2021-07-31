@@ -47,7 +47,7 @@ fn get_attr_string<B: BufRead>(
     xml: &quick_xml::Reader<B>,
 ) -> Option<String> {
     match get_attr_raw(name.as_bytes(), attrs) {
-        Some(a) => a.unescape_and_decode_value(&xml).ok(),
+        Some(a) => a.unescape_and_decode_value(xml).ok(),
         None => None,
     }
 }

@@ -4,7 +4,7 @@ use atom_syndication::{
 use clap::ArgMatches;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use rouille::{Request, Response};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::prelude::*;
 use std::path::Path;
 use std::str;
@@ -63,7 +63,7 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
             req_no_prefix = r;
             req = &req_no_prefix;
         }
-        let res = rouille::match_assets(&req, DEFAULT_ASSETS_DIR);
+        let res = rouille::match_assets(req, DEFAULT_ASSETS_DIR);
         if res.is_success() {
             return res;
         }
@@ -79,33 +79,33 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
         }
 
         router!(req,
-            (GET) (/book/count) => { handler_count(&req, &fts) },
-            (GET) (/search) => { handler_search(&req, &fts, app.debug) },
-            (GET) (/facet) => { handler_facet(&req, &fts, app.debug) },
+            (GET) (/book/count) => { handler_count(req, &fts) },
+            (GET) (/search) => { handler_search(req, &fts, app.debug) },
+            (GET) (/facet) => { handler_facet(req, &fts, app.debug) },
             (GET) (/genre/translation) => { Response::json(&app.genre_map.translation) },
-            (GET) (/book/{zipfile: String}/{filename: String}/render) => { handler_render(&req, &fts, &app, &zipfile, &filename) },
-            (GET) (/book/{zipfile: String}/{filename: String}) => { handler_file(&req, &app, &zipfile, &filename) },
-            (GET) (/book/{zipfile: String}/{filename: String}/{_saveas: String}) => { handler_file(&req, &app, &zipfile, &filename) },
-            (GET) (/opensearch) => { handler_opensearch_xml(&req) },
-            (GET) (/file_list) => { handler_file_list(&req, &fts) },
-            (GET) (/opds) => { opds_root(&req, &fts) },
-            (GET) (/opds/search/{query: String}) => { opds_search_where(&req, &query) },
-            (GET) (/opds/search/{query: String}/) => { opds_search_where(&req, &query) },
+            (GET) (/book/{zipfile: String}/{filename: String}/render) => { handler_render(req, &fts, &app, &zipfile, &filename) },
+            (GET) (/book/{zipfile: String}/{filename: String}) => { handler_file(req, &app, &zipfile, &filename) },
+            (GET) (/book/{zipfile: String}/{filename: String}/{_saveas: String}) => { handler_file(req, &app, &zipfile, &filename) },
+            (GET) (/opensearch) => { handler_opensearch_xml(req) },
+            (GET) (/file_list) => { handler_file_list(req, &fts) },
+            (GET) (/opds) => { opds_root(req, &fts) },
+            (GET) (/opds/search/{query: String}) => { opds_search_where(req, &query) },
+            (GET) (/opds/search/{query: String}/) => { opds_search_where(req, &query) },
             (GET) (/opds/search/{field: String}/{query: String}/{page: usize}) => {
                 let query = format!("{}:{}", field, query);
-                opds_search_books(&req, &query, "default", page, &app.genre_map.translation, &fts)
+                opds_search_books(req, &query, "default", page, &app.genre_map.translation, &fts)
             },
-            (GET) (/opds/author) => { opds_facet(&req, "author", None, "Авторы", None, &fts) },
-            (GET) (/opds/author/{prefix: String}) => { opds_facet(&req, "author", Some(&prefix), "Авторы", None, &fts) },
+            (GET) (/opds/author) => { opds_facet(req, "author", None, "Авторы", None, &fts) },
+            (GET) (/opds/author/{prefix: String}) => { opds_facet(req, "author", Some(&prefix), "Авторы", None, &fts) },
             (GET) (/opds/author/{prefix: String}/{name: String}/{page: usize}) => {
                 let query = format!("facet:/author/{}/{}", prefix, name);
-                opds_search_books(&req, &query, "title", page, &app.genre_map.translation, &fts)
+                opds_search_books(req, &query, "title", page, &app.genre_map.translation, &fts)
             },
-            (GET) (/opds/genre) => { opds_facet(&req, "genre", None, "Жанры", Some(&app.genre_map.translation), &fts) },
-            (GET) (/opds/genre/{prefix: String}) => { opds_facet(&req, "genre", Some(&prefix), "Жанры", Some(&app.genre_map.translation), &fts) },
+            (GET) (/opds/genre) => { opds_facet(req, "genre", None, "Жанры", Some(&app.genre_map.translation), &fts) },
+            (GET) (/opds/genre/{prefix: String}) => { opds_facet(req, "genre", Some(&prefix), "Жанры", Some(&app.genre_map.translation), &fts) },
             (GET) (/opds/genre/{cat: String}/{code: String}/{page: usize}) => {
                 let query = format!("facet:/genre/{}/{}", cat, code);
-                opds_search_books(&req, &query, "title", page, &app.genre_map.translation, &fts)
+                opds_search_books(req, &query, "title", page, &app.genre_map.translation, &fts)
             },
             _ =>  Response::empty_404() ,
         )
@@ -204,7 +204,7 @@ fn handler_render(
     zipfile: &str,
     filename: &str,
 ) -> Response {
-    let ext = file_extension(&filename);
+    let ext = file_extension(filename);
     match app.book_formats.get(&ext.as_ref()) {
         Some(book_format) => {
             let (title, enc) = match fts.get_book_info(zipfile, filename).unwrap() {
@@ -309,7 +309,7 @@ fn opds_response(
     next_url: Option<String>,
 ) -> Response {
     let abs_url = format!("{}/porcula{}", root, path);
-    let mut ns = HashMap::<String, String>::new();
+    let mut ns = BTreeMap::<String, String>::new();
     ns.insert("dcterms".into(), "http://purl.org/dc/terms".into());
 
     let mut links = vec![
@@ -317,20 +317,17 @@ fn opds_response(
             .href(&abs_url)
             .rel("self")
             .mime_type(atom_nav_mime_type())
-            .build()
-            .unwrap(),
+            .build(),
         LinkBuilder::default()
             .href("/porcula/opds")
             .rel("start")
             .mime_type(atom_nav_mime_type())
-            .build()
-            .unwrap(),
+            .build(),
         LinkBuilder::default()
             .href("/porcula/opds/search/{searchTerms}")
             .rel("search")
             .mime_type(atom_mime_type())
-            .build()
-            .unwrap(),
+            .build(),
     ];
     if let Some(url) = prev_url {
         links.push(
@@ -341,8 +338,7 @@ fn opds_response(
                     tr!["Previous Page", "Предыдущая страница"].to_string(),
                 ))
                 .mime_type(atom_cat_mime_type())
-                .build()
-                .unwrap(),
+                .build(),
         );
     }
     if let Some(url) = next_url {
@@ -352,8 +348,7 @@ fn opds_response(
                 .rel("next")
                 .title(Some(tr!["Next Page", "Следующая страница"].to_string()))
                 .mime_type(atom_cat_mime_type())
-                .build()
-                .unwrap(),
+                .build(),
         );
     }
     let f = FeedBuilder::default()
@@ -365,8 +360,7 @@ fn opds_response(
         .updated(chrono::Utc::now())
         .links(links)
         .entries(entries)
-        .build()
-        .unwrap();
+        .build();
     Response::from_data("application/xml", f.to_string())
 }
 
@@ -379,14 +373,12 @@ fn opds_root(req: &Request, fts: &BookReader) -> Response {
         LinkBuilder::default()
             .href(format!("{}/porcula/opds/author", root_url))
             .rel("alternate")
-            .build()
-            .unwrap(),
+            .build(),
         LinkBuilder::default()
             .href("/porcula/opds/author")
             .rel("subsection")
             .mime_type(atom_nav_mime_type())
-            .build()
-            .unwrap(),
+            .build(),
     ];
     e.push(
         EntryBuilder::default()
@@ -397,25 +389,21 @@ fn opds_root(req: &Request, fts: &BookReader) -> Response {
             .content(
                 ContentBuilder::default()
                     .value(format!("{}: {}", tr!["Books", "Книг"], book_count))
-                    .build()
-                    .unwrap(),
+                    .build(),
             )
-            .build()
-            .unwrap(),
+            .build(),
     );
 
     let links = vec![
         LinkBuilder::default()
             .href(format!("{}/porcula/opds/genre", root_url))
             .rel("alternate")
-            .build()
-            .unwrap(),
+            .build(),
         LinkBuilder::default()
             .href("/porcula/opds/genre")
             .rel("subsection")
             .mime_type(atom_nav_mime_type())
-            .build()
-            .unwrap(),
+            .build(),
     ];
     e.push(
         EntryBuilder::default()
@@ -426,11 +414,9 @@ fn opds_root(req: &Request, fts: &BookReader) -> Response {
             .content(
                 ContentBuilder::default()
                     .value(format!("{}: {}", tr!["Books", "Книг"], book_count))
-                    .build()
-                    .unwrap(),
+                    .build(),
             )
-            .build()
-            .unwrap(),
+            .build(),
     );
 
     opds_response("Porcula", &root_url, &req_path, e, None, None)
@@ -446,14 +432,12 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
         LinkBuilder::default()
             .href(abs_url)
             .rel("alternate")
-            .build()
-            .unwrap(),
+            .build(),
         LinkBuilder::default()
             .href(rel_url)
             .rel("subsection")
             .mime_type(atom_nav_mime_type())
-            .build()
-            .unwrap(),
+            .build(),
     ];
     e.push(
         EntryBuilder::default()
@@ -461,8 +445,7 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
             .id("st:1")
             .title(tr!["Search by title", "Поиск по наименованию"])
             .links(links)
-            .build()
-            .unwrap(),
+            .build(),
     );
 
     let rel_url = format!("/porcula/opds/search/author/{}/0", urlenc(query));
@@ -471,14 +454,12 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
         LinkBuilder::default()
             .href(abs_url)
             .rel("alternate")
-            .build()
-            .unwrap(),
+            .build(),
         LinkBuilder::default()
             .href(rel_url)
             .rel("subsection")
             .mime_type(atom_nav_mime_type())
-            .build()
-            .unwrap(),
+            .build(),
     ];
     e.push(
         EntryBuilder::default()
@@ -486,8 +467,7 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
             .id("st:2")
             .title(tr!["Search by author", "Поиск по автору"])
             .links(links)
-            .build()
-            .unwrap(),
+            .build(),
     );
 
     let rel_url = format!("/porcula/opds/search/body/{}/0", urlenc(query));
@@ -496,14 +476,12 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
         LinkBuilder::default()
             .href(abs_url)
             .rel("alternate")
-            .build()
-            .unwrap(),
+            .build(),
         LinkBuilder::default()
             .href(rel_url)
             .rel("subsection")
             .mime_type(atom_nav_mime_type())
-            .build()
-            .unwrap(),
+            .build(),
     ];
     e.push(
         EntryBuilder::default()
@@ -511,8 +489,7 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
             .id("st:3")
             .title(tr!["Search in book text", "Поиск по тексту книги"])
             .links(links)
-            .build()
-            .unwrap(),
+            .build(),
     );
 
     opds_response(
@@ -573,14 +550,12 @@ fn opds_facet(
                     LinkBuilder::default()
                         .href(&abs_url)
                         .rel("alternate")
-                        .build()
-                        .unwrap(),
+                        .build(),
                     LinkBuilder::default()
                         .href(&rel_url)
                         .rel("subsection")
                         .mime_type(atom_nav_mime_type())
-                        .build()
-                        .unwrap(),
+                        .build(),
                 ];
                 e.push(
                     EntryBuilder::default()
@@ -590,12 +565,10 @@ fn opds_facet(
                         .content(
                             ContentBuilder::default()
                                 .value(format!("{}: {}", tr!["Books", "Книг"], count))
-                                .build()
-                                .unwrap(),
+                                .build(),
                         )
                         .links(links)
-                        .build()
-                        .unwrap(),
+                        .build(),
                 );
             }
             opds_response(title, &root_url, &req_path, e, None, None)
@@ -654,29 +627,25 @@ fn opds_search_books(
                     LinkBuilder::default()
                         .href(&abs_url)
                         .rel("alternate")
-                        .build()
-                        .unwrap(),
+                        .build(),
                     LinkBuilder::default()
                         .href(&rel_url)
                         .rel("http://opds-spec.org/acquisition/open-access")
                         .mime_type(Some("application/fb2+xml".into()))
-                        .build()
-                        .unwrap(),
+                        .build(),
                     LinkBuilder::default()
                         .href(&cover_url)
                         .rel("http://opds-spec.org/image")
                         .mime_type(Some("image/jpeg".into()))
-                        .build()
-                        .unwrap(),
+                        .build(),
                 ];
                 let mut b = EntryBuilder::default()
                     .id(format!("b:{}/{}", i.zipfile, i.filename))
                     .title(i.title)
                     .links(links)
-                    .build()
-                    .unwrap();
+                    .build();
                 if let Some(x) = i.annotation {
-                    b.set_content(Some(ContentBuilder::default().value(x).build().unwrap()));
+                    b.set_content(Some(ContentBuilder::default().value(x).build()));
                 }
                 b.set_authors(
                     i.author

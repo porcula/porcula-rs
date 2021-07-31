@@ -80,7 +80,7 @@ impl GenreMap {
     pub fn translate(&self, code: &str) -> String {
         let code = self.normalize(code);
         match self.translation.get(code.as_str()) {
-            Some(ref t) => (*t).to_string(),
+            Some(t) => t.to_string(),
             None => code,
         }
     }

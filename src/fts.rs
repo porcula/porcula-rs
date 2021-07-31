@@ -93,7 +93,7 @@ impl Fields {
         let nonstored_stemmed_text_opts =
             TextOptions::default().set_indexing_options(stemmed_indexing_opts);
         Fields {
-            facet: schema_builder.add_facet_field("facet"),
+            facet: schema_builder.add_facet_field("facet", INDEXED | STORED),
             id: schema_builder.add_text_field("id", STORED | STRING),
             encoding: schema_builder.add_text_field("encoding", STORED),
             length: schema_builder.add_u64_field("length", STORED),
@@ -143,7 +143,7 @@ impl Fields {
 
 fn file_facet(zipfile: &str, filename: &str) -> Facet {
     let path: String = format!("/file/{}/{}", zipfile, filename);
-    Facet::from_text(&path)
+    Facet::from_text(&path).unwrap()
 }
 
 fn get_simple_tokenizer() -> TextAnalyzer {
@@ -537,18 +537,18 @@ impl BookReader {
             let mut offset = offset;
             match order {
                 "title" => all_docs.sort_by_cached_key(|d| {
-                    LocalString(first_str(&d, self.fields.title).to_lowercase())
+                    LocalString(first_str(d, self.fields.title).to_lowercase())
                 }),
                 "author" => all_docs.sort_by_cached_key(|d| {
-                    LocalString(joined_values(&d, self.fields.author).to_lowercase())
+                    LocalString(joined_values(d, self.fields.author).to_lowercase())
                 }),
                 "translator" => all_docs.sort_by_cached_key(|d| {
-                    LocalString(joined_values(&d, self.fields.translator).to_lowercase())
+                    LocalString(joined_values(d, self.fields.translator).to_lowercase())
                 }),
                 "sequence" => all_docs.sort_by_cached_key(|d| {
                     (
-                        LocalString(first_str(&d, self.fields.sequence).to_lowercase()),
-                        first_i64_value(&d, self.fields.seqnum),
+                        LocalString(first_str(d, self.fields.sequence).to_lowercase()),
+                        first_i64_value(d, self.fields.seqnum),
                     )
                 }),
                 "random" => {
@@ -659,7 +659,7 @@ impl BookReader {
     pub fn get_book_info(&self, zipfile: &str, filename: &str) -> Result<Option<(String, String)>> {
         // (title,encoding)
         let searcher = self.reader.searcher();
-        if let Some(doc_address) = self.find_book(&searcher, &zipfile, &filename)? {
+        if let Some(doc_address) = self.find_book(&searcher, zipfile, filename)? {
             let doc = searcher.doc(doc_address)?;
             let title: &str = first_str(&doc, self.fields.title);
             let encoding: &str = first_str(&doc, self.fields.encoding);

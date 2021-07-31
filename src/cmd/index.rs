@@ -271,7 +271,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                             &entry.zipfile,
                             &entry.filename,
                             *book,
-                            &genre_map,
+                            genre_map,
                             opts_body,
                             opts_xbody,
                         ) {
@@ -424,7 +424,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                                 &filename,
                                 data,
                                 lang_filter,
-                                &book_formats,
+                                book_formats,
                                 &opts,
                                 debug,
                             );
@@ -609,11 +609,11 @@ where
                     println!("  {}/{} -> {}", zipfile, filename, &b)
                 }
                 let lang = if !b.lang.is_empty() { &b.lang[0] } else { "" };
-                if lang_filter(&lang) {
+                if lang_filter(lang) {
                     if let Some(img) = b.cover_image {
                         let it = Instant::now();
                         match crate::img_resizer::resize(
-                            &img.as_slice(),
+                            img.as_slice(),
                             COVER_IMAGE_WIDTH,
                             COVER_IMAGE_HEIGHT,
                         ) {
