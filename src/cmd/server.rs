@@ -520,7 +520,7 @@ fn opds_facet(
             let mut arr: Vec<(String, u64, String)> = data
                 .into_iter()
                 .map(|(path, count)| {
-                    let code = path.rsplitn(2, '/').next().unwrap_or("?");
+                    let code = path.rsplit_once('/').map(|x| x.1).unwrap_or("?");
                     let title = match translation {
                         Some(t) => match t.get(code) {
                             Some(tr) => tr.to_owned(),
@@ -537,7 +537,7 @@ fn opds_facet(
             for (path, count, title) in arr {
                 let mut path = path
                     .split('/')
-                    .map(|x| urlenc(x))
+                    .map(urlenc)
                     .collect::<Vec<String>>()
                     .join("/");
                 //append page to final path, i.e. "/author/A/Abcd" -> "/author/A/Abcd/0"
@@ -589,10 +589,7 @@ fn opds_search_books(
     let limit = OPDS_PAGE_ENTRIES;
     let offset = page * OPDS_PAGE_ENTRIES;
     //split path to base and page
-    let mut path_parts = req_path
-        .split('/')
-        .map(|x| urlenc(x))
-        .collect::<Vec<String>>();
+    let mut path_parts = req_path.split('/').map(urlenc).collect::<Vec<String>>();
     let prev_url = if page == 0 || path_parts.len() < 2 {
         None
     } else {
@@ -600,7 +597,6 @@ fn opds_search_books(
         path_parts[n] = format!("{}", page - 1);
         Some(path_parts.join("/"))
     };
-    //println!("DEBUG page={} limit={} offset={} root={} path={} -> prev={:?}", page, limit, offset, root_url, req_path, prev_url);
     match fts.search_as_meta(query, order, limit, offset, false) {
         Ok(data) => {
             let next_url = if data.len() < limit {
