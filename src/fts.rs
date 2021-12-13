@@ -353,13 +353,28 @@ impl BookWriter {
     }
 
     pub fn commit(&mut self) -> Result<()> {
-        self.writer.commit()?;
-        Ok(())
+        let res = self.writer.commit().map(|_| ());
+        #[cfg(not(target_os = "windows"))]
+        return res;
+        //windows: some spurious IO error can be fixed by retrying
+        #[cfg(target_os = "windows")]
+        return match res {
+            Err(TantivyError::OpenWriteError(
+                tantivy::directory::error::OpenWriteError::IoError { io_error, filepath },
+            )) if io_error.kind() == std::io::ErrorKind::PermissionDenied => {
+                eprintln!(
+                    "retry after error: {} at {}",
+                    io_error,
+                    filepath.to_string_lossy()
+                );
+                self.writer.commit().map(|_| ())
+            }
+            any => any,
+        };
     }
 
     pub fn wait_merging_threads(self) -> Result<()> {
-        self.writer.wait_merging_threads()?;
-        Ok(())
+        self.writer.wait_merging_threads().map(|_| ())
     }
 }
 
