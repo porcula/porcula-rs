@@ -83,6 +83,7 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
             (GET) (/search) => { handler_search(req, &fts, app.debug) },
             (GET) (/facet) => { handler_facet(req, &fts, app.debug) },
             (GET) (/genre/translation) => { Response::json(&app.genre_map.translation) },
+            (GET) (/book/{zipfile: String}/{filename: String}/cover) => { handler_cover(req, &fts, &zipfile, &filename) },
             (GET) (/book/{zipfile: String}/{filename: String}/render) => { handler_render(req, &fts, &app, &zipfile, &filename) },
             (GET) (/book/{zipfile: String}/{filename: String}) => { handler_file(req, &app, &zipfile, &filename) },
             (GET) (/book/{zipfile: String}/{filename: String}/{_saveas: String}) => { handler_file(req, &app, &zipfile, &filename) },
@@ -198,6 +199,18 @@ fn handler_file_list(_req: &Request, fts: &BookReader) -> Response {
         Response::json(&list)
     } else {
         Response::empty_404()
+    }
+}
+
+fn handler_cover(_req: &Request, fts: &BookReader, zipfile: &str, filename: &str) -> Response {
+    match fts.get_cover(zipfile, filename) {
+        Ok(Some(img)) if !img.is_empty() => {
+            Response::from_data("image/jpeg", img).with_public_cache(CACHE_IMMUTABLE)
+        }
+        _ => rouille::match_assets(
+            &Request::fake_http("GET", DEFAULT_COVER_IMAGE, vec![], vec![]),
+            DEFAULT_ASSETS_DIR,
+        ),
     }
 }
 

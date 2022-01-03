@@ -683,6 +683,19 @@ impl BookReader {
         Ok(None)
     }
 
+    pub fn get_cover(&self, zipfile: &str, filename: &str) -> Result<Option<Vec<u8>>> {
+        let searcher = self.reader.searcher();
+        if let Some(doc_address) = self.find_book(&searcher, &zipfile, &filename)? {
+            let doc = searcher.doc(doc_address)?;
+            if let Some(base64_str) = first_string(&doc, self.fields.cover_image) {
+                if let Ok(jpeg) = base64::decode(base64_str) {
+                    return Ok(Some(jpeg));
+                }
+            }
+        }
+        Ok(None)
+    }
+
     pub fn get_facet(
         &self,
         path: &str,
