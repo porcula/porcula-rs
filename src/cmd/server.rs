@@ -93,7 +93,11 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
             (GET) (/opds/search/{query: String}/) => { opds_search_where(req, &query) },
             (GET) (/opds/search/{field: String}/{query: String}/{page: usize}) => {
                 let query = format!("{}:{}", field, query);
-                opds_search_books(req, &query, "default", page, &app.genre_map.translation, &fts)
+                let order = match field.as_str() {
+                    "sequence" => "sequence",
+                    _ => "default"
+                };
+                opds_search_books(req, &query, order, page, &app.genre_map.translation, &fts)
             },
             (GET) (/opds/author) => { opds_facet(req, "author", None, "Авторы", None, &fts) },
             (GET) (/opds/author/{prefix: String}) => { opds_facet(req, "author", Some(&prefix), "Авторы", None, &fts) },
@@ -492,6 +496,28 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
             .build(),
     );
 
+    let rel_url = format!("/porcula/opds/search/sequence/{}/0", urlenc(query));
+    let abs_url = format!("{}{}", &root_url, &rel_url);
+    let links = vec![
+        LinkBuilder::default()
+            .href(abs_url)
+            .rel("alternate")
+            .build(),
+        LinkBuilder::default()
+            .href(rel_url)
+            .rel("subsection")
+            .mime_type(atom_nav_mime_type())
+            .build(),
+    ];
+    e.push(
+        EntryBuilder::default()
+            .updated(chrono::Utc::now())
+            .id("st:3")
+            .title(tr!["Search in series", "Поиск по серии книг"])
+            .links(links)
+            .build(),
+    );
+
     opds_response(
         tr!["Porcula - search", "Porcula - поиск"],
         &root_url,
@@ -642,6 +668,15 @@ fn opds_search_books(
                     .build();
                 if let Some(x) = i.annotation {
                     b.set_content(Some(ContentBuilder::default().value(x).build()));
+                }
+                if let Some(sequence) = i.sequence {
+                    let text = format!(
+                        "{}: {} {}",
+                        tr!["Sequence", "Серия"],
+                        sequence,
+                        i.seqnum.unwrap_or(0)
+                    );
+                    b.set_summary(Some(text.into()));
                 }
                 b.set_authors(
                     i.author
