@@ -13,7 +13,7 @@ extern crate rouille;
 extern crate lazy_static;
 extern crate deepsize;
 
-use clap::{Arg, SubCommand};
+use clap::{Arg, Command};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -33,16 +33,16 @@ use crate::genre_map::GenreMap;
 use crate::types::*;
 
 #[allow(clippy::cognitive_complexity)]
-fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
-    clap::App::new("Porcula")
+fn cmd_line_matches() -> clap::ArgMatches {
+    Command::new("Porcula")
         .version(env!("CARGO_PKG_VERSION"))
         .about(tr![
             "Full-text search on collection of e-books",
             "Полнотекстовый поиск по коллекции электронных книг"
         ])
         .arg(
-            Arg::with_name("index-dir")
-                .short("i")
+            Arg::new("index-dir")
+                .short('i')
                 .long("index-dir")
                 .takes_value(true)
                 .value_name("DIR")
@@ -53,8 +53,8 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                 ]),
         )
         .arg(
-            Arg::with_name("books-dir")
-                .short("b")
+            Arg::new("books-dir")
+                .short('b')
                 .long("books-dir")
                 .takes_value(true)
                 .value_name("DIR")
@@ -64,17 +64,17 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                     "Каталог с книгами, только чтение"
                 ]),
         )
-        .arg(Arg::with_name("debug").short("d").long("debug").help(tr![
+        .arg(Arg::new("debug").short('d').long("debug").help(tr![
             "Print debug information",
             "Вывод отладочной информации"
         ]))
         .subcommand(
-            SubCommand::with_name("index")
+            Command::new("index")
                 .about(tr!["Index/reindex books", "Индексация книг"])
                 .arg(
-                    Arg::with_name("INDEX-MODE")
-                        .required(true)
+                    Arg::new("INDEX-MODE")
                         .index(1)
+                        .takes_value(false)
                         .possible_values(&["full", "delta"])
                         .default_value("delta")
                         .help(tr![
@@ -83,24 +83,24 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         ]),
                 )
                 .arg(
-                    Arg::with_name("file")
-                        .short("f")
+                    Arg::new("file")
+                        .short('f')
                         .long("file")
                         .takes_value(true)
                         .required(false)
-                        .multiple(true)
+                        .multiple_occurrences(true)
                         .help(tr![
                             "Archive file name to reindex",
                             "Имя отдельного архива для переиндексации"
                         ]),
                 )
                 .arg(
-                    Arg::with_name("language")
-                        .short("l")
+                    Arg::new("language")
+                        .short('l')
                         .long("lang")
                         .takes_value(true)
-                        .multiple(true)
-                        .use_delimiter(true)
+                        .multiple_occurrences(true)
+                        .use_value_delimiter(true)
                         .value_name(tr!["2 letter code | ANY", "2-буквенный код | ANY"])
                         .default_value(DEFAULT_LANGUAGE)
                         .help(tr![
@@ -109,7 +109,7 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         ]),
                 )
                 .arg(
-                    Arg::with_name("stemmer")
+                    Arg::new("stemmer")
                         .long("stemmer")
                         .takes_value(true)
                         .value_name(tr!["language code | OFF", "код языка | OFF"])
@@ -117,8 +117,8 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         .help(tr!["Word stemmer", "Алгоритм определения основы слова"]),
                 )
                 .arg(
-                    Arg::with_name("index-threads")
-                        .short("t")
+                    Arg::new("index-threads")
+                        .short('t')
                         .long("index-threads")
                         .takes_value(true)
                         .value_name("number")
@@ -129,18 +129,18 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         ]),
                 )
                 .arg(
-                    Arg::with_name("heap-memory")
+                    Arg::new("heap-memory")
                         .default_value(DEFAULT_HEAP_SIZE_MB)
-                        .short("m")
+                        .short('m')
                         .long("heap-memory")
                         .takes_value(true)
                         .value_name("MB")
                         .help(tr!["Heap memory size", "Размер памяти"]),
                 )
                 .arg(
-                    Arg::with_name("batch-size")
+                    Arg::new("batch-size")
                         .default_value(DEFAULT_BATCH_SIZE_MB)
-                        .short("B")
+                        .short('B')
                         .long("batch-size")
                         .takes_value(true)
                         .value_name("MB")
@@ -150,8 +150,8 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         ]),
                 )
                 .arg(
-                    Arg::with_name("read-threads")
-                        .short("r")
+                    Arg::new("read-threads")
+                        .short('r')
                         .long("read-threads")
                         .takes_value(true)
                         .value_name("number")
@@ -159,8 +159,8 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         .help(tr!["Number of read workers", "Число потоков чтения"]),
                 )
                 .arg(
-                    Arg::with_name("read-queue")
-                        .short("q")
+                    Arg::new("read-queue")
+                        .short('q')
                         .long("read-queue")
                         .takes_value(true)
                         .value_name("number")
@@ -168,7 +168,7 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         .help(tr!["Size of read queue", "Размер очереди чтения"]),
                 )
                 .arg(
-                    Arg::with_name("with-body")
+                    Arg::new("with-body")
                         .long("with-body")
                         .help(tr![
                             "Enable indexing of book's body",
@@ -177,7 +177,7 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         .conflicts_with("without-body"),
                 )
                 .arg(
-                    Arg::with_name("without-body")
+                    Arg::new("without-body")
                         .long("without-body")
                         .help(tr![
                             "Disable indexing of book's body",
@@ -186,7 +186,7 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         .conflicts_with("with-body"),
                 )
                 .arg(
-                    Arg::with_name("with-xbody")
+                    Arg::new("with-xbody")
                         .long("with-xbody")
                         .help(tr![
                             "Enable indexing of book's body with stemming",
@@ -195,7 +195,7 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         .conflicts_with("without-xbody"),
                 )
                 .arg(
-                    Arg::with_name("without-xbody")
+                    Arg::new("without-xbody")
                         .long("without-xbody")
                         .help(tr![
                             "Disable indexing of book's body with stemming",
@@ -204,7 +204,7 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         .conflicts_with("with-xbody"),
                 )
                 .arg(
-                    Arg::with_name("with-annotation")
+                    Arg::new("with-annotation")
                         .long("with-annotation")
                         .help(tr![
                             "Enable indexing of book's annotation",
@@ -213,7 +213,7 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         .conflicts_with("without-annotation"),
                 )
                 .arg(
-                    Arg::with_name("without-annotation")
+                    Arg::new("without-annotation")
                         .long("without-annotation")
                         .help(tr![
                             "Disable indexing of book's annotation",
@@ -222,7 +222,7 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         .conflicts_with("with-annotation"),
                 )
                 .arg(
-                    Arg::with_name("with-cover")
+                    Arg::new("with-cover")
                         .long("with-cover")
                         .help(tr![
                             "Enable extraction of book's cover image",
@@ -231,7 +231,7 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                         .conflicts_with("without-cover"),
                 )
                 .arg(
-                    Arg::with_name("without-cover")
+                    Arg::new("without-cover")
                         .long("without-cover")
                         .help(tr![
                             "Disable extraction of book's cover image",
@@ -241,21 +241,21 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                 ),
         )
         .subcommand(
-            SubCommand::with_name("query")
+            Command::new("query")
                 .about(tr![
                     "Run single query, print result as JSON and exit",
                     "Выполнить запрос, результат в формате JSON"
                 ])
                 .arg(
-                    Arg::with_name("QUERY-TEXT")
+                    Arg::new("QUERY-TEXT")
                         .required(true)
                         .index(1)
                         .help(tr!["Query text", "Текст запроса"]),
                 )
                 .arg(
-                    Arg::with_name("hits")
+                    Arg::new("hits")
                         .default_value(DEFAULT_QUERY_HITS_STR)
-                        .short("h")
+                        .short('H')
                         .long("hits")
                         .takes_value(true)
                         .value_name("INT")
@@ -266,19 +266,19 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                 ),
         )
         .subcommand(
-            SubCommand::with_name("facet")
+            Command::new("facet")
                 .about(tr![
                     "Run single facet query, print result as JSON and exit",
                     "Выполнить фасетный запрос, результат в формате JSON"
                 ])
-                .arg(Arg::with_name("PATH").required(true).index(1).help(tr![
+                .arg(Arg::new("PATH").required(true).index(1).help(tr![
                     "Facet path, i.e. '/author/K' or '/genre/sf'",
-                    "Путь по категориям, например '/author/K' или '/genre/sf'"
+                    "Путь по категориям, например '/author/K' или '/genre/fiction/sf'"
                 ]))
                 .arg(
-                    Arg::with_name("hits")
+                    Arg::new("hits")
                         .default_value(DEFAULT_QUERY_HITS_STR)
-                        .short("h")
+                        .short('H')
                         .long("hits")
                         .takes_value(true)
                         .value_name("INT")
@@ -289,15 +289,15 @@ fn cmd_line_matches<'a>() -> clap::ArgMatches<'a> {
                 ),
         )
         .subcommand(
-            SubCommand::with_name("server")
+            Command::new("server")
                 .about(tr![
                     "Start web server [default mode]",
                     "Запустить веб-сервер [основной режим работы]"
                 ])
                 .arg(
-                    Arg::with_name("listen")
+                    Arg::new("listen")
                         .default_value(DEFAULT_LISTEN_ADDR)
-                        .short("L")
+                        .short('L')
                         .long("listen")
                         .takes_value(true)
                         .value_name("IP:PORT")

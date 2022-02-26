@@ -685,7 +685,7 @@ impl BookReader {
 
     pub fn get_cover(&self, zipfile: &str, filename: &str) -> Result<Option<Vec<u8>>> {
         let searcher = self.reader.searcher();
-        if let Some(doc_address) = self.find_book(&searcher, &zipfile, &filename)? {
+        if let Some(doc_address) = self.find_book(&searcher, zipfile, filename)? {
             let doc = searcher.doc(doc_address)?;
             if let Some(base64_str) = first_string(&doc, self.fields.cover_image) {
                 if let Ok(jpeg) = base64::decode(base64_str) {
@@ -738,7 +738,7 @@ impl BookReader {
             } else if looks_like_regex.is_match(i) {
                 regexes.push(i.to_lowercase());
             } else if looks_like_wildcard.is_match(i) {
-                let re = i.replace("*", ".*").replace("?", ".").to_lowercase();
+                let re = i.replace('*', ".*").replace('?', ".").to_lowercase();
                 regexes.push(re);
             } else {
                 words.push(i);

@@ -1,6 +1,6 @@
 [package]
 name = "porcula"
-version = "0.3.7"
+version = "0.3.8"
 authors = ["alexey.s.v.br@gmail.com"]
 edition = "2018"
 publish = false
@@ -14,7 +14,7 @@ lto = "fat"
 zip = { version = "0.5", default-features = false, features = ["deflate"] }
 base64 = "0.13"
 regex = "1.5"
-rouille = { version = "3.4", default-features = false }
+rouille = { version = "3.5", default-features = false }
 rand = "0.8"
 chardet = "0.2"
 htmlescape = "0.3"
@@ -25,9 +25,9 @@ ctrlc = "3.2"
 deepsize = "0.2"
 tantivy = { version = "0.16", features = ["mmap","brotli-compression"] }
 quick-xml = { version = "0.22", features = ["encoding"] }
-image = { version = "0.23", default-features = false, features = ["jpeg","png","gif","bmp"] }
+image = { version = "0.24", default-features = false, features = ["jpeg","png","gif","bmp"] }
 encoding = { version = "0.2", default-features = false }
-clap = { version = "2.34", default-features = false }
+clap = { version = "3.1", default-features = false, features = ["std"] }
 atom_syndication = "0.11"
 chrono = "0.4"
 percent-encoding = "2.1"
