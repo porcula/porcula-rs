@@ -9,6 +9,7 @@ publish = false
 opt-level = "s"
 codegen-units = 1
 lto = "fat"
+strip = true
 
 [dependencies]
 zip = { version = "0.5", default-features = false, features = ["deflate"] }
