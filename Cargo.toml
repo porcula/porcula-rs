@@ -5,6 +5,15 @@ authors = ["alexey.s.v.br@gmail.com"]
 edition = "2018"
 publish = false
 
+[profile.dev.package.adler]
+opt-level = 3
+[profile.dev.package.adler32]
+opt-level = 3
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+[profile.dev.package.tantivy]
+opt-level = 3
+
 [profile.release]
 opt-level = "s"
 codegen-units = 1
