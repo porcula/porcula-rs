@@ -213,9 +213,17 @@ impl BookFormat for Fb2BookFormat {
                         b"sequence" => {
                             for i in e.attributes().filter_map(|x| x.ok()) {
                                 match i.key {
-                                    b"name" => if let Ok(name) = i.unescape_and_decode_value(&xml) { sequence.push(name); },
-                                    b"number" => if let Ok(number) = i.unescape_and_decode_value(&xml) { seqnum.push(number.parse::<i64>().unwrap_or_default()); },
-                                    _ => ()
+                                    b"name" => {
+                                        if let Ok(name) = i.unescape_and_decode_value(&xml) {
+                                            sequence.push(name);
+                                        }
+                                    }
+                                    b"number" => {
+                                        if let Ok(number) = i.unescape_and_decode_value(&xml) {
+                                            seqnum.push(number.parse::<i64>().unwrap_or_default());
+                                        }
+                                    }
+                                    _ => (),
                                 }
                             }
                         }

@@ -130,7 +130,9 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         .value_of("read-queue")
         .map(|x| x.parse::<usize>().unwrap_or(64))
         .unwrap_or(64);
-    let heap_mb_str = matches.value_of("heap-memory").unwrap_or(DEFAULT_HEAP_SIZE_MB);
+    let heap_mb_str = matches
+        .value_of("heap-memory")
+        .unwrap_or(DEFAULT_HEAP_SIZE_MB);
     let heap_size = 1024
         * 1024
         * heap_mb_str.parse::<usize>().unwrap_or_else(|_| {
