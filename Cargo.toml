@@ -1,6 +1,6 @@
 [package]
 name = "porcula"
-version = "0.3.8"
+version = "0.3.9"
 authors = ["alexey.s.v.br@gmail.com"]
 edition = "2018"
 publish = false

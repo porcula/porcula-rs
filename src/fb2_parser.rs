@@ -211,16 +211,12 @@ impl BookFormat for Fb2BookFormat {
                     }
                     Ok(Event::Empty(ref e)) => match e.name() {
                         b"sequence" => {
-                            let mut attrs = e.attributes();
-                            if let Some(name) = get_attr_string("name", &mut attrs, &xml) {
-                                let mut num: i64 = 0;
-                                if let Some(n) = get_attr_string("number", &mut attrs, &xml) {
-                                    if let Ok(i) = n.parse::<i64>() {
-                                        num = i;
-                                    }
+                            for i in e.attributes().filter_map(|x| x.ok()) {
+                                match i.key {
+                                    b"name" => if let Ok(name) = i.unescape_and_decode_value(&xml) { sequence.push(name); },
+                                    b"number" => if let Ok(number) = i.unescape_and_decode_value(&xml) { seqnum.push(number.parse::<i64>().unwrap_or_default()); },
+                                    _ => ()
                                 }
-                                sequence.push(name);
-                                seqnum.push(num);
                             }
                         }
                         b"image" => {

@@ -68,6 +68,7 @@ fn cmd_line_matches() -> clap::ArgMatches {
             "Print debug information",
             "Вывод отладочной информации"
         ]))
+        .arg(Arg::new("listen").takes_value(true).hide(true)) //compatibility with default "server" subcommand
         .subcommand(
             Command::new("index")
                 .about(tr!["Index/reindex books", "Индексация книг"])

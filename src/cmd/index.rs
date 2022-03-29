@@ -90,8 +90,8 @@ struct ParseOpts {
 pub fn run_index(matches: &ArgMatches, app: &mut Application) {
     let debug = app.debug;
     if matches.occurrences_of("language") > 0 {
-        if let Some(v) = matches.values_of_lossy("language") {
-            app.index_settings.langs = v;
+        if let Some(v) = matches.values_of("language") {
+            app.index_settings.langs = v.map(|s| s.to_string()).collect();
         }
     }
     assert!(
@@ -103,7 +103,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         ],
         INDEX_SETTINGS_FILE
     );
-    let files: Vec<&std::ffi::OsStr> = matches.values_of_os("file").unwrap_or_default().collect();
+    let files: Vec<&str> = matches.values_of("file").unwrap_or_default().collect();
     if matches.occurrences_of("stemmer") > 0 {
         if let Some(v) = matches.value_of("stemmer") {
             app.index_settings.stemmer = v.to_string();
@@ -221,13 +221,12 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         }
         false => None,
     };
-    //println!("DEBUG indexed_books={:?}", indexed_books);
 
     let mut zip_files: Vec<DirEntry> = std::fs::read_dir(&app.books_path)
         .expect("directory not readable")
         .map(|x| x.expect("invalid file"))
         .filter(is_zip_file)
-        .filter(|x| files.is_empty() || files.contains(&x.file_name().as_os_str()))
+        .filter(|x| files.is_empty() || files.contains(&x.file_name().to_str().unwrap_or_default()))
         .collect();
     zip_files.sort_by_key(|x| get_numeric_sort_key(x.file_name().to_str().unwrap_or_default()));
     let zip_total_count = zip_files.len();
