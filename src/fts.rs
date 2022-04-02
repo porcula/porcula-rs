@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use tantivy::collector::{Count, FacetCollector, TopDocs};
 use tantivy::query::{
-    AllQuery, BooleanQuery, Occur, Query, QueryParser, QueryParserError, RegexQuery, TermQuery,
+    AllQuery, BooleanQuery, Occur, Query, QueryParser, QueryParserError, RegexQuery, TermQuery, FuzzyTermQuery,
 };
 use tantivy::schema::*;
 use tantivy::tokenizer::*;
@@ -416,6 +416,12 @@ fn first_u64_value(doc: &Document, field: Field) -> u64 {
         .unwrap_or(0)
 }
 
+fn parse_fuzzy_pattern(pat: &str) -> (String, u8) {
+    let distance = pat.matches('~').count();
+    let word = pat.replace('~',"");
+    (word, distance as u8)
+}
+
 impl BookReader {
     pub fn new<P: AsRef<Path>>(index_dir: P, lang: &str) -> Result<BookReader> {
         let index = Index::open_in_dir(index_dir)?;
@@ -719,8 +725,10 @@ impl BookReader {
         //emulate wildcard queries (word* or word?) with regexes
         let mut words = vec![];
         let mut regexes = vec![];
+        let mut fuzzy = vec![];
         let looks_like_regex = Regex::new(r"[.\])][*+?]").unwrap(); //  foo.* | foo[0-9]+ | (foo)?
         let looks_like_wildcard = Regex::new(r"[*?]").unwrap(); // foo* | fo?
+        let looks_like_fuzzy = Regex::new(r"~$").unwrap(); // foo~
 
         //TODO: phrase quoting, now just split query to words
         for i in query.split_whitespace() {
@@ -731,18 +739,20 @@ impl BookReader {
             } else if looks_like_wildcard.is_match(i) {
                 let re = i.replace('*', ".*").replace('?', ".").to_lowercase();
                 regexes.push(re);
+            } else if looks_like_fuzzy.is_match(i) {
+                fuzzy.push(i.to_lowercase());
             } else {
                 words.push(i);
             }
         }
         if debug {
-            println!("debug: words={:?} regexes={:?}", words, regexes);
+            println!("debug: words={:?} regexes={:?} fuzzy={:?}", words, regexes, fuzzy);
         }
         let mut queries: Vec<(Occur, Box<dyn Query>)> = vec![];
         if !words.is_empty() {
             let std_query = words.join(" ");
             let q = self.query_parser.parse_query(&std_query)?;
-            if regexes.is_empty() {
+            if regexes.is_empty() && fuzzy.is_empty() {
                 //regular query
                 return Ok(q);
             }
@@ -763,6 +773,30 @@ impl BookReader {
                 let mut subqueries: Vec<(Occur, Box<dyn Query>)> = vec![];
                 for field in self.default_fields.iter() {
                     let q = RegexQuery::from_pattern(&i, *field)?; //don't want directly use tantivy_fst::Regex
+                    subqueries.push((Occur::Should, Box::new(q)));
+                }
+                let q = BooleanQuery::from(subqueries);
+                queries.push((Occur::Must, Box::new(q)));
+            }
+        }
+        for i in fuzzy {
+            if let Some(m) = field_re.captures(&i) {
+                let field_name = m.get(1).unwrap().as_str();
+                let pat = m.get(2).unwrap().as_str();
+                let (word, distance) = parse_fuzzy_pattern(pat);
+                let field = self
+                    .schema
+                    .get_field(field_name)
+                    .ok_or_else(|| QueryParserError::FieldDoesNotExist(field_name.to_string()))?;
+                let term = Term::from_field_text(field, &word);
+                let q = FuzzyTermQuery::new(term, distance as u8, true);
+                queries.push((Occur::Must, Box::new(q)));
+            } else {
+                let mut subqueries: Vec<(Occur, Box<dyn Query>)> = vec![];
+                let (word, distance) = parse_fuzzy_pattern(&i);
+                for field in self.default_fields.iter() {
+                    let term = Term::from_field_text(*field, &word);
+                    let q = FuzzyTermQuery::new(term, distance, true);
                     subqueries.push((Occur::Should, Box::new(q)));
                 }
                 let q = BooleanQuery::from(subqueries);
