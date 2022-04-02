@@ -233,7 +233,7 @@ impl BookWriter {
         let facet = Facet::from_path(vec![WHOLE_MARKER, zipfile]);
         doc.add_facet(self.fields.facet, facet);
         doc.add_u64(self.fields.length, count); //books count
-        self.writer.add_document(doc);
+        self.writer.add_document(doc)?;
         Ok(())
     }
 
@@ -348,7 +348,7 @@ impl BookWriter {
         if let Some(raw) = book.cover_image {
             doc.add_text(self.fields.cover_image, base64::encode(raw));
         }
-        self.writer.add_document(doc);
+        self.writer.add_document(doc)?;
         Ok(())
     }
 
@@ -378,37 +378,28 @@ impl BookWriter {
     }
 }
 
-fn first_string_def(doc: &Document, field: Field, default: &str) -> String {
-    match doc.get_first(field) {
-        Some(x) => match x.text() {
-            Some(s) => s.to_string(),
-            None => default.to_string(),
-        },
-        None => default.to_string(),
-    }
-}
-
 fn first_string(doc: &Document, field: Field) -> Option<String> {
     match doc.get_first(field) {
-        Some(x) => x.text().map(|s| s.to_string()),
-        None => None,
+        Some(Value::Str(s)) => Some(s.to_string()),
+        _ => None,
     }
 }
 
-fn first_str(doc: &Document, field: Field) -> &str {
-    doc.get_first(field)
-        .map(|x| x.text().unwrap_or(""))
-        .unwrap_or("")
+fn first_str(doc: &Document, field: Field) -> Option<&str> {
+    match doc.get_first(field) {
+        Some(x) => x.as_text(),
+        _ => None,
+    }
 }
 
 fn joined_values(doc: &Document, field: Field) -> String {
-    let v: Vec<&str> = doc.get_all(field).filter_map(|x| x.text()).collect();
+    let v: Vec<&str> = doc.get_all(field).filter_map(|x| x.as_text()).collect();
     v.join(", ")
 }
 
 fn vec_string(doc: &Document, field: Field) -> Vec<String> {
     doc.get_all(field)
-        .filter_map(|x| x.text())
+        .filter_map(|x| x.as_text())
         .map(|s| s.to_string())
         .collect()
 }
@@ -552,7 +543,7 @@ impl BookReader {
             let mut offset = offset;
             match order {
                 "title" => all_docs.sort_by_cached_key(|d| {
-                    LocalString(first_str(d, self.fields.title).to_lowercase())
+                    LocalString(first_str(d, self.fields.title).unwrap_or_default().to_lowercase())
                 }),
                 "author" => all_docs.sort_by_cached_key(|d| {
                     LocalString(joined_values(d, self.fields.author).to_lowercase())
@@ -562,7 +553,7 @@ impl BookReader {
                 }),
                 "sequence" => all_docs.sort_by_cached_key(|d| {
                     (
-                        LocalString(first_str(d, self.fields.sequence).to_lowercase()),
+                        LocalString(first_str(d, self.fields.sequence).unwrap_or_default().to_lowercase()),
                         first_i64_value(d, self.fields.seqnum),
                     )
                 }),
@@ -640,8 +631,8 @@ impl BookReader {
                 zipfile,
                 filename,
                 length: first_u64_value(&doc, self.fields.length),
-                title: first_string_def(&doc, self.fields.title, ""),
-                lang: first_string_def(&doc, self.fields.lang, ""),
+                title: first_string(&doc, self.fields.title).unwrap_or_default(),
+                lang: first_string(&doc, self.fields.lang).unwrap_or_default(),
                 date: first_string(&doc, self.fields.date),
                 genre,
                 keyword: vec_string(&doc, self.fields.keyword),
@@ -676,8 +667,8 @@ impl BookReader {
         let searcher = self.reader.searcher();
         if let Some(doc_address) = self.find_book(&searcher, zipfile, filename)? {
             let doc = searcher.doc(doc_address)?;
-            let title: &str = first_str(&doc, self.fields.title);
-            let encoding: &str = first_str(&doc, self.fields.encoding);
+            let title: &str = first_str(&doc, self.fields.title).unwrap_or_default();
+            let encoding: &str = first_str(&doc, self.fields.encoding).unwrap_or_default();
             return Ok(Some((title.to_string(), encoding.to_string())));
         }
         Ok(None)
