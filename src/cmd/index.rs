@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::cmd::*;
+use crate::fts::{IndexListDetails, IndexedFiles};
 use crate::tr;
 use crate::types::Book;
 
@@ -212,6 +213,10 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         heap_size,
     )
     .unwrap();
+    if debug {
+        println!("merge policy: {}", book_writer.debug_merge_policy());
+    }
+
     //enforce reindex of books inside specified files
     let indexed_books = match files.is_empty() && delta {
         true => {
@@ -219,7 +224,11 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                 println!("loading list of indexed files");
             }
             let book_reader = app.open_book_reader().unwrap();
-            Some(book_reader.get_indexed_books(true).unwrap()) //read ALL indexed file names as two-level hash: zipfile->{filenames}
+            Some(
+                book_reader
+                    .get_indexed_books(IndexListDetails::Compact)
+                    .unwrap(),
+            ) //read indexed file names as two-level hash: zipfile->{filenames}
         }
         false => None,
     };
@@ -319,10 +328,12 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
             }
             let ct = Instant::now();
             book_writer.commit().unwrap();
-            if debug {
-                println!("Waiting for merging threads");
+            if !commit_canceled.load(Ordering::SeqCst) {
+                if debug {
+                    println!("Waiting for merging threads");
+                }
+                book_writer.wait_merging_threads().unwrap();
             }
-            book_writer.wait_merging_threads().unwrap();
             stats.time_to_commit += ct.elapsed();
             if debug {
                 println!("Final commit: done");
@@ -343,19 +354,17 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
             let zip_progress_pct = zip_progress_size * 100 / zip_total_size;
             let zipfile = os_filename.to_str().expect("invalid filename");
             if let Some(indexed) = &indexed_books {
-                if let Some(files) = indexed.get(zipfile) {
-                    if files.contains(crate::fts::WHOLE_MARKER) {
-                        println!(
-                            "[{}/{}] {} {}",
-                            zip_index + 1,
-                            zip_total_count,
-                            tr!["skip archive", "пропускаем архив"],
-                            &zipfile
-                        );
-                        zip_skipped += 1;
-                        zip_progress_size += zip_size;
-                        continue;
-                    }
+                if let Some(IndexedFiles::Whole) = indexed.get(zipfile) {
+                    println!(
+                        "[{}/{}] {} {}",
+                        zip_index + 1,
+                        zip_total_count,
+                        tr!["skip archive", "пропускаем архив"],
+                        &zipfile
+                    );
+                    zip_skipped += 1;
+                    zip_progress_size += zip_size;
+                    continue;
                 }
             }
             zip_processed += 1;
@@ -407,7 +416,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                         }
                         let mut process_book = true;
                         if let Some(indexed) = &indexed_books {
-                            if let Some(files) = indexed.get(zipfile) {
+                            if let Some(IndexedFiles::List(files)) = indexed.get(zipfile) {
                                 if files.contains(&filename) {
                                     println!("  {} {}", &filename, tr!["indexed", "индексирован"]);
                                     stats.book_skipped += 1;

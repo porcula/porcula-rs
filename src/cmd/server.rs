@@ -195,8 +195,8 @@ fn handler_facet(req: &Request, fts: &BookReader, debug: bool) -> Response {
 }
 
 fn handler_file_list(_req: &Request, fts: &BookReader) -> Response {
-    if let Ok(list) = fts.get_indexed_books(false) {
-        Response::json(&list)
+    if let Ok(hash) = fts.get_indexed_books(crate::fts::IndexListDetails::Full) {
+        Response::json(&hash)
     } else {
         Response::empty_404()
     }

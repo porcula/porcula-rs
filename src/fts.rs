@@ -4,7 +4,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use tantivy::collector::{Count, FacetCollector, TopDocs};
 use tantivy::query::{
-    AllQuery, BooleanQuery, Occur, Query, QueryParser, QueryParserError, RegexQuery, TermQuery, FuzzyTermQuery,
+    AllQuery, BooleanQuery, FuzzyTermQuery, Occur, Query, QueryParser, QueryParserError,
+    RegexQuery, TermQuery,
 };
 use tantivy::schema::*;
 use tantivy::tokenizer::*;
@@ -58,7 +59,18 @@ pub struct BookMeta {
     pub annotation: Option<String>,
 }
 
-pub type IndexedBooks = HashMap<String, HashSet<String>>; //zipfile->{filenames}
+pub enum IndexListDetails {
+    Full,
+    Compact,
+}
+
+#[derive(serde::Serialize)]
+pub enum IndexedFiles {
+    Whole,
+    List(HashSet<String>),
+}
+
+pub type IndexedBooks = HashMap<String, IndexedFiles>; //zipfile->{filenames}
 
 #[allow(dead_code)]
 pub struct BookWriter {
@@ -220,6 +232,11 @@ impl BookWriter {
             fields,
             use_stemmer: stemmer != "OFF",
         })
+    }
+
+    pub fn debug_merge_policy(&self) -> String {
+        let mp = self.writer.get_merge_policy();
+        format!("{:?}", mp)
     }
 
     pub fn delete_all_books(&mut self) -> Result<()> {
@@ -418,7 +435,7 @@ fn first_u64_value(doc: &Document, field: Field) -> u64 {
 
 fn parse_fuzzy_pattern(pat: &str) -> (String, u8) {
     let distance = pat.matches('~').count();
-    let word = pat.replace('~',"");
+    let word = pat.replace('~', "");
     (word, distance as u8)
 }
 
@@ -458,26 +475,23 @@ impl BookReader {
     }
 
     /// Extract list of indexed files
-    /// compact==true: Get complete zipfiles plus books of incomplete zipfiles
-    /// compact==false: Get all books
-    pub fn get_indexed_books(&self, compact: bool) -> Result<IndexedBooks> {
+    /// compact==Compact: Get complete zipfiles plus books of incomplete zipfiles
+    /// compact==Full: Get all books
+    pub fn get_indexed_books(&self, compact: IndexListDetails) -> Result<IndexedBooks> {
         let mut res = HashMap::new();
         let searcher = self.reader.searcher();
-        if compact {
+        if let IndexListDetails::Compact = compact {
             //collect whole zipfiles
             let mut facet_collector = FacetCollector::for_field(self.fields.facet);
             let whole_facet = Facet::from_path(vec![WHOLE_MARKER]);
             facet_collector.add_facet(whole_facet.clone());
             let facet_counts = searcher.search(&AllQuery, &facet_collector)?;
             for (zip_facet, _) in facet_counts.get(whole_facet) {
-                let path = zip_facet.to_path(); //0='WHOLE',1=zipfile
-                if path.len() < 2 {
-                    continue;
+                let path = zip_facet.to_path(); //['WHOLE',zipfile]
+                if path.len() > 1 {
+                    let zipfile = path[1].to_string();
+                    res.insert(zipfile, IndexedFiles::Whole);
                 }
-                let zipfile = path[1].to_string();
-                let mut hs = HashSet::new();
-                hs.insert(WHOLE_MARKER.to_owned());
-                res.insert(zipfile, hs);
             }
         }
         //collect files
@@ -486,7 +500,7 @@ impl BookReader {
         facet_collector.add_facet(root_facet.clone());
         let facet_counts = searcher.search(&AllQuery, &facet_collector)?;
         for (zip_facet, _) in facet_counts.get(root_facet) {
-            let path = zip_facet.to_path(); //0='file',1=zipfile
+            let path = zip_facet.to_path(); //['file',zipfile]
             if path.len() < 2 {
                 continue;
             }
@@ -507,7 +521,7 @@ impl BookReader {
                 }
                 hs.insert(path[2].to_owned());
             }
-            res.insert(zipfile, hs);
+            res.insert(zipfile, IndexedFiles::List(hs));
         }
         Ok(res)
     }
@@ -549,7 +563,11 @@ impl BookReader {
             let mut offset = offset;
             match order {
                 "title" => all_docs.sort_by_cached_key(|d| {
-                    LocalString(first_str(d, self.fields.title).unwrap_or_default().to_lowercase())
+                    LocalString(
+                        first_str(d, self.fields.title)
+                            .unwrap_or_default()
+                            .to_lowercase(),
+                    )
                 }),
                 "author" => all_docs.sort_by_cached_key(|d| {
                     LocalString(joined_values(d, self.fields.author).to_lowercase())
@@ -559,7 +577,11 @@ impl BookReader {
                 }),
                 "sequence" => all_docs.sort_by_cached_key(|d| {
                     (
-                        LocalString(first_str(d, self.fields.sequence).unwrap_or_default().to_lowercase()),
+                        LocalString(
+                            first_str(d, self.fields.sequence)
+                                .unwrap_or_default()
+                                .to_lowercase(),
+                        ),
                         first_i64_value(d, self.fields.seqnum),
                     )
                 }),
@@ -746,7 +768,10 @@ impl BookReader {
             }
         }
         if debug {
-            println!("debug: words={:?} regexes={:?} fuzzy={:?}", words, regexes, fuzzy);
+            println!(
+                "debug: words={:?} regexes={:?} fuzzy={:?}",
+                words, regexes, fuzzy
+            );
         }
         let mut queries: Vec<(Occur, Box<dyn Query>)> = vec![];
         if !words.is_empty() {
