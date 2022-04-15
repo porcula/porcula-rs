@@ -16,7 +16,7 @@
             <a class="list" href="genres.html">Жанры</a>
             <a class="list" href="authors.html">Авторы</a>
             <a class="list" href="keywords.html" title="Ключевые слова">КС</a>
-            <div id="extra_tools" class="mh">
+            <div id="extra_tools" style="margin-top:4px" class="mh">
                 <span>Всего книг: <span id="book_count"></span></span>
                 <span class="at_field">
                     <span data-field="title">название</span>
@@ -87,7 +87,7 @@
     <script>
         var size100pct = 5000000;
         var page = 0;
-        var page_size = +(storage.getItem("page_size") || 20);
+        var page_size = +(storage.getItem("page_size") || $("#page_size").val() || 20);
         $("#page_size").val(page_size);
         var last_page = 0;
         var order = "default";
@@ -105,6 +105,7 @@
         $("#page_size").change(function () {
             page_size = +$("#page_size").val();
             page = 0;
+            storage.setItem("page_size", page_size);
         });
 
         $(".prev").click(go_prev_page);
@@ -164,6 +165,7 @@
         });
 
         function search(append) {
+            $("#page_size").val(page_size);
             $("#res_wrapper").hide();
             $("#query_hint").hide();
             if (!append) $("#result tbody").empty();
