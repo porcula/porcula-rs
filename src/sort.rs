@@ -50,7 +50,9 @@ impl Ord for LocalStr<'_> {
                                 (None, None) => self.0.cmp(other.0),
                             };
                         }
-                        Ordering::Equal
+                        let a = self.0.len();
+                        let b = other.0.len();
+                        a.cmp(&b)
                     }
                 }
             }
@@ -78,6 +80,9 @@ impl PartialOrd for LocalString {
 
 #[test]
 fn test_sort() {
+    let a = LocalStr("aaa");
+    let b = LocalStr("aa");
+    assert_eq!(a.cmp(&b), Ordering::Greater);
     let a = LocalStr("Фыва");
     let b = LocalStr("Asdf");
     assert_eq!(a.cmp(&b), Ordering::Less);
@@ -97,6 +102,11 @@ fn test_sort() {
         "«ела»",
         "кашу",
         "ёлка",
+        "Мегрэ путешествует",
+        "Мегрэ расставляет ловушку",
+        "Мегрэ",
+        "Мегрэ путешествует",
+        "Мегрэ расставляет ловушку",
     ];
     let b = vec![
         "«ела»",
@@ -104,6 +114,11 @@ fn test_sort() {
         "кашу",
         "Мама",
         "Маша",
+        "Мегрэ",
+        "Мегрэ путешествует",
+        "Мегрэ путешествует",
+        "Мегрэ расставляет ловушку",
+        "Мегрэ расставляет ловушку",
         "...мыла",
         "раму",
         "Eeny",
