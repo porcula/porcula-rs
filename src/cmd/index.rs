@@ -1,4 +1,3 @@
-use clap::ArgMatches;
 use rayon::prelude::*;
 use regex::Regex;
 use std::collections::HashSet;
@@ -79,86 +78,13 @@ struct CommitStats {
     time_to_commit: Duration,
 }
 
-#[derive(Clone)]
-struct ParseOpts {
-    body: bool,
-    xbody: bool,
-    annotation: bool,
-    cover: bool,
-}
-
 #[allow(clippy::cognitive_complexity)]
-pub fn run_index(matches: &ArgMatches, app: &mut Application) {
+pub fn run_index(args: &IndexArgs, app: Application) {
     let debug = app.debug;
-    if matches.occurrences_of("language") > 0 {
-        if let Some(v) = matches.values_of("language") {
-            app.index_settings.langs = v.map(|s| s.to_string()).collect();
-        }
-    }
-    assert!(
-        !app.index_settings.langs.is_empty(),
-        "{} {}",
-        tr![
-            "No language specified nor on command line [--lang], nor in settings file",
-            "Не указан язык ни в командной строке [--lang], ни в файле настроек"
-        ],
-        INDEX_SETTINGS_FILE
-    );
-    let files: Vec<&str> = matches.values_of("file").unwrap_or_default().collect();
-    if matches.occurrences_of("stemmer") > 0 {
-        if let Some(v) = matches.value_of("stemmer") {
-            app.index_settings.stemmer = v.to_string();
-        }
-    }
-    let delta = !matches!(matches.value_of("INDEX-MODE"), Some("full"));
-    for i in &["body", "xbody", "annotation", "cover"] {
-        let s = (*i).to_string();
-        if matches.is_present(format!("with-{}", i)) {
-            app.index_settings.disabled.remove(&s); //enabling field
-        }
-        if matches.is_present(format!("without-{}", i)) {
-            app.index_settings.disabled.insert(s); //disabling field
-        }
-    }
-    let index_threads = matches
-        .value_of("index-threads")
-        .map(|x| x.parse::<usize>().unwrap_or(0));
-    let read_threads = matches
-        .value_of("read-threads")
-        .map(|x| x.parse::<usize>().unwrap_or(1))
-        .unwrap_or(1);
-    let read_queue = matches
-        .value_of("read-queue")
-        .map(|x| x.parse::<usize>().unwrap_or(64))
-        .unwrap_or(64);
-    let heap_mb_str = matches
-        .value_of("heap-memory")
-        .unwrap_or(DEFAULT_HEAP_SIZE_MB);
-    let heap_size = 1024
-        * 1024
-        * heap_mb_str.parse::<usize>().unwrap_or_else(|_| {
-            eprintln!(
-                "{} {}",
-                tr!["Invalid memory size", "Некорректный размер"],
-                heap_mb_str
-            );
-            std::process::exit(4);
-        });
-    let batch_mb_str = matches
-        .value_of("batch-size")
-        .unwrap_or(DEFAULT_BATCH_SIZE_MB);
-    let batch_size = 1024
-        * 1024
-        * batch_mb_str.parse::<usize>().unwrap_or_else(|_| {
-            eprintln!(
-                "{} {}",
-                tr!["Invalid memory size", "Некорректный размер"],
-                batch_mb_str
-            );
-            std::process::exit(4);
-        });
+    let delta = args.mode == IndexMode::Delta;
+    let batch_size = args.batch_size * 1024 * 1024; //MB->bytes
     app.load_genre_map();
-    let genre_map = &app.genre_map;
+    let genre_map = app.load_genre_map();
     let book_formats = &app.book_formats;
 
     let mut lang_set = HashSet::<String>::new();
@@ -171,12 +97,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
     }
     //index books with `undefined` language too
     let lang_filter = |lang: &str| any_lang || lang_set.contains(lang) || lang.is_empty();
-    let opts = ParseOpts {
-        body: !app.index_settings.disabled.contains("body"),
-        xbody: !app.index_settings.disabled.contains("xbody"),
-        annotation: !app.index_settings.disabled.contains("annotation"),
-        cover: !app.index_settings.disabled.contains("cover"),
-    };
+    let opts = &app.index_settings.options;
 
     println!(
         "----{}----\ndir={} delta={} lang={:?} stemmer={} body={} xbody={} annotation={} cover={} files={:?}",
@@ -191,7 +112,11 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
     if debug {
         println!(
             "read threads={} read queue={} index threads={:?} heap={} batch={}",
-            read_threads, read_queue, index_threads, heap_size, batch_size,
+            args.read_threads,
+            args.read_queue,
+            args.index_threads,
+            args.heap_memory,
+            args.batch_size,
         );
     }
     //save settings with index
@@ -209,8 +134,8 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
     let mut book_writer = crate::fts::BookWriter::new(
         &app.index_path,
         &app.index_settings.stemmer,
-        index_threads,
-        heap_size,
+        args.index_threads,
+        args.heap_memory * 1024 * 1024,
     )
     .unwrap();
     if debug {
@@ -218,7 +143,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
     }
 
     //enforce reindex of books inside specified files
-    let indexed_books = match files.is_empty() && delta {
+    let indexed_books = match args.file.is_empty() && delta {
         true => {
             if debug {
                 println!("loading list of indexed files");
@@ -237,7 +162,12 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
         .expect("directory not readable")
         .map(|x| x.expect("invalid file"))
         .filter(is_zip_file)
-        .filter(|x| files.is_empty() || files.contains(&x.file_name().to_str().unwrap_or_default()))
+        .filter(|x| {
+            args.file.is_empty()
+                || args
+                    .file
+                    .contains(&x.file_name().to_str().unwrap_or_default().to_string())
+        })
         .collect();
     zip_files.sort_by_key(|x| get_numeric_sort_key(x.file_name().to_str().unwrap_or_default()));
     let zip_total_count = zip_files.len();
@@ -259,7 +189,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
     })
     .expect("Error setting Ctrl-C handler");
 
-    let (send_book, recv_book) = crossbeam_channel::bounded::<ParsedBook>(read_queue);
+    let (send_book, recv_book) = crossbeam_channel::bounded::<ParsedBook>(args.read_queue);
 
     //single commit-thread
     crossbeam_utils::thread::scope(|scope| {
@@ -281,7 +211,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                             &entry.zipfile,
                             &entry.filename,
                             *book,
-                            genre_map,
+                            &genre_map,
                             opts_body,
                             opts_xbody,
                         ) {
@@ -378,14 +308,13 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                 &zipfile
             );
             let reader = std::fs::File::open(&entry.path()).unwrap();
-            //let reader = std::io::BufReader::with_capacity(READ_BUFFER_SIZE, reader);
             let zip = zip::ZipArchive::new(reader).unwrap();
             let file_count = zip.len();
-            let part_size = file_count / read_threads;
-            let partitions: Vec<(usize, usize)> = (0..read_threads)
+            let part_size = file_count / args.read_threads;
+            let partitions: Vec<(usize, usize)> = (0..args.read_threads)
                 .map(|i| {
                     let first = i * part_size;
-                    let last = if i == read_threads - 1 {
+                    let last = if i == args.read_threads - 1 {
                         file_count
                     } else {
                         first + part_size
@@ -435,7 +364,7 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
                                 data,
                                 lang_filter,
                                 book_formats,
-                                &opts,
+                                opts,
                                 debug,
                             );
                             stats.parsed_size += parsed_book.parsed_size;
@@ -520,9 +449,9 @@ pub fn run_index(matches: &ArgMatches, app: &mut Application) {
             gstats.warning_count,
         );
         if debug {
-            let ue = gstats.time_to_unzip.as_millis() / read_threads as u128;
-            let pe = gstats.time_to_parse.as_millis() / read_threads as u128;
-            let ie = gstats.time_to_image.as_millis() / read_threads as u128;
+            let ue = gstats.time_to_unzip.as_millis() / args.read_threads as u128;
+            let pe = gstats.time_to_parse.as_millis() / args.read_threads as u128;
+            let ie = gstats.time_to_image.as_millis() / args.read_threads as u128;
             let ce = cstats.time_to_commit.as_millis();
             println!(
                 "unpacking {}%, parse {}%, image resize {}%, commit {}%",

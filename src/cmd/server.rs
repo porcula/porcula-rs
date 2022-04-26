@@ -1,7 +1,6 @@
 use atom_syndication::{
     Category, ContentBuilder, Entry, EntryBuilder, FeedBuilder, LinkBuilder, Person,
 };
-use clap::ArgMatches;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use rouille::{Request, Response};
 use std::collections::{BTreeMap, HashMap};
@@ -17,12 +16,11 @@ const CACHE_IMMUTABLE: u64 = 31_536_000;
 const CACHE_STATIC_ASSET: u64 = 86_400;
 const OPDS_PAGE_ENTRIES: usize = 20;
 
-pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> {
+pub fn run_server(args: &ServerArgs, app: Application) {
     let fts = app.open_book_reader().unwrap_or_else(|e| {
         eprintln!("{}", e);
         std::process::exit(4);
     });
-    let listen_addr = matches.value_of("listen").unwrap_or(DEFAULT_LISTEN_ADDR);
     println!(
         "{}: {}",
         tr!["Index dir", "Индекс"],
@@ -43,15 +41,18 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
         tr!["Stemmer", "Стеммер"],
         &app.index_settings.stemmer
     );
+    println!("{:?}", &app.index_settings.options);
     println!(
         "{}: http://{}/porcula/home.html",
         tr!["Application", "Приложение"],
-        &listen_addr
+        &args.listen
     );
+    let genre_map = app.load_genre_map();
+    let debug = app.debug;
 
     #[allow(clippy::cognitive_complexity, clippy::manual_strip)]
-    rouille::start_server(&listen_addr, move |req| {
-        if app.debug {
+    rouille::start_server(&args.listen, move |req| {
+        if debug {
             println!("req {}", req.raw_url())
         }
         let mut req = req;
@@ -80,9 +81,9 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
 
         router!(req,
             (GET) (/book/count) => { handler_count(req, &fts) },
-            (GET) (/search) => { handler_search(req, &fts, app.debug) },
-            (GET) (/facet) => { handler_facet(req, &fts, app.debug) },
-            (GET) (/genre/translation) => { Response::json(&app.genre_map.translation) },
+            (GET) (/search) => { handler_search(req, &fts, debug) },
+            (GET) (/facet) => { handler_facet(req, &fts, debug) },
+            (GET) (/genre/translation) => { Response::json(&genre_map.translation) },
             (GET) (/book/{zipfile: String}/{filename: String}/cover) => { handler_cover(req, &fts, &zipfile, &filename) },
             (GET) (/book/{zipfile: String}/{filename: String}/render) => { handler_render(req, &fts, &app, &zipfile, &filename) },
             (GET) (/book/{zipfile: String}/{filename: String}) => { handler_file(req, &app, &zipfile, &filename) },
@@ -98,19 +99,19 @@ pub fn run_server(matches: &ArgMatches, app: Application) -> Result<(), String> 
                     "sequence" => "sequence",
                     _ => "default"
                 };
-                opds_search_books(req, &query, order, page, &app.genre_map.translation, &fts)
+                opds_search_books(req, &query, order, page, &genre_map.translation, &fts)
             },
             (GET) (/opds/author) => { opds_facet(req, "author", None, "Авторы", None, &fts) },
             (GET) (/opds/author/{prefix: String}) => { opds_facet(req, "author", Some(&prefix), "Авторы", None, &fts) },
             (GET) (/opds/author/{prefix: String}/{name: String}/{page: usize}) => {
                 let query = format!("facet:/author/{}/{}", prefix, name);
-                opds_search_books(req, &query, "title", page, &app.genre_map.translation, &fts)
+                opds_search_books(req, &query, "title", page, &genre_map.translation, &fts)
             },
-            (GET) (/opds/genre) => { opds_facet(req, "genre", None, "Жанры", Some(&app.genre_map.translation), &fts) },
-            (GET) (/opds/genre/{prefix: String}) => { opds_facet(req, "genre", Some(&prefix), "Жанры", Some(&app.genre_map.translation), &fts) },
+            (GET) (/opds/genre) => { opds_facet(req, "genre", None, "Жанры", Some(&genre_map.translation), &fts) },
+            (GET) (/opds/genre/{prefix: String}) => { opds_facet(req, "genre", Some(&prefix), "Жанры", Some(&genre_map.translation), &fts) },
             (GET) (/opds/genre/{cat: String}/{code: String}/{page: usize}) => {
                 let query = format!("facet:/genre/{}/{}", cat, code);
-                opds_search_books(req, &query, "title", page, &app.genre_map.translation, &fts)
+                opds_search_books(req, &query, "title", page, &genre_map.translation, &fts)
             },
             _ =>  Response::empty_404() ,
         )
