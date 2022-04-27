@@ -134,13 +134,13 @@ pub struct IndexArgs {
     pub read_queue: usize,
     #[clap(short='B', long, default_value_t=1024, help=tr!("Batch size between commits","Размер данных между сохранениями"), value_name="MB")]
     pub batch_size: usize,
-    #[clap(long, help=tr!("Index book's body", "Индексировать текст книги (без учёта склонения)"))]
+    #[clap(long, help=tr!("Index book's body", "Индексировать текст книги (без учёта склонения)"), value_name="on|off")]
     pub body: Option<OnOff>,
-    #[clap(long, help=tr!("Index book's body with stemming", "Индексировать текст книги (по основам слов)"))]
+    #[clap(long, help=tr!("Index book's body with stemming", "Индексировать текст книги (по основам слов)"), value_name="on|off")]
     pub xbody: Option<OnOff>,
-    #[clap(long, help=tr!("Index book's annotation", "Индексировать аннотацию"))]
+    #[clap(long, help=tr!("Index book's annotation", "Индексировать аннотацию"), value_name="on|off")]
     pub annotation: Option<OnOff>,
-    #[clap(long, help=tr!("Extract book's cover image", "Извлекать обложку книги"))]
+    #[clap(long, help=tr!("Extract book's cover image", "Извлекать обложку книги"), value_name="on|off")]
     pub cover: Option<OnOff>,
 }
 
@@ -161,6 +161,8 @@ pub struct QueryArgs {
     pub query: String,
     #[clap(short = 'H', long, default_value_t = DEFAULT_QUERY_HITS, help=tr!("Limit results to N top hits", "Ограничить число найденных книг"))]
     pub hits: usize,
+    #[clap(short = 'x', long, help=tr!("Search in stemmed fields", "Поиск по всем формам слова"))]
+    pub stem: bool,
 }
 
 #[derive(Args, Debug)]

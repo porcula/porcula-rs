@@ -6,7 +6,7 @@ pub fn run_facet(args: &FacetArgs, app: Application) {
         eprintln!("{}", e);
         std::process::exit(4);
     });
-    match fts.get_facet(&args.path, None, Some(args.hits), app.debug) {
+    match fts.get_facet(&args.path, None, false, Some(args.hits), app.debug) {
         Ok(res) => {
             println!("{}", serde_json::to_string(&res).unwrap());
         }

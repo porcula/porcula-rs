@@ -36,10 +36,12 @@ struct Fields {
     translator: Field,
     sequence: Field,
     seqnum: Field,
-    annotation: Field,
+    annotation: Field,  //simple tokenizer
     body: Field,        //simple tokenizer
     xbody: Field,       //stemmed tokenizer
     cover_image: Field, //jpeg in base64
+    xtitle: Field,      //stemmed tokenizer
+    xannotation: Field, //stemmed tokenizer
 }
 
 #[derive(Debug)]
@@ -84,9 +86,11 @@ pub struct BookWriter {
 pub struct BookReader {
     reader: IndexReader,
     schema: Schema,
-    query_parser: QueryParser,
+    default_parser: QueryParser, //search in main fields without stemming
+    stem_parser: QueryParser, //search in main fields with and without stemming
     fields: Fields,
     default_fields: Vec<Field>,
+    stemmed_field_for: HashMap<String,String>, //non-stemmed-field name -> stemmed-field name
 }
 
 impl Fields {
@@ -119,9 +123,11 @@ impl Fields {
             sequence: schema_builder.add_text_field("sequence", stored_text_opts.clone()),
             seqnum: schema_builder.add_i64_field("seqnum", STORED),
             annotation: schema_builder.add_text_field("annotation", stored_text_opts),
-            body: schema_builder.add_text_field("body", nonstored_simple_text_opts),
-            xbody: schema_builder.add_text_field("xbody", nonstored_stemmed_text_opts),
+            body: schema_builder.add_text_field("body", nonstored_simple_text_opts.clone()),
+            xbody: schema_builder.add_text_field("xbody", nonstored_stemmed_text_opts.clone()),
             cover_image: schema_builder.add_text_field("cover_image", STORED),
+            xtitle: schema_builder.add_text_field("xtitle", nonstored_stemmed_text_opts.clone()),
+            xannotation: schema_builder.add_text_field("xannotation", nonstored_stemmed_text_opts.clone()),
         }
     }
 
@@ -149,6 +155,8 @@ impl Fields {
             body: load_field("body")?,
             xbody: load_field("xbody")?,
             cover_image: load_field("cover_image")?,
+            xtitle: load_field("xtitle")?,
+            xannotation: load_field("xannotation")?,
         })
     }
 }
@@ -278,7 +286,10 @@ impl BookWriter {
         }
         for i in &book.title {
             if !i.is_empty() {
-                doc.add_text(self.fields.title, &i)
+                doc.add_text(self.fields.title, &i);
+                if self.use_stemmer {
+                    doc.add_text(self.fields.xtitle, &i);
+                }
             }
         }
         for i in &book.date {
@@ -351,7 +362,12 @@ impl BookWriter {
             doc.add_i64(self.fields.seqnum, *i);
         }
         if let Some(v) = &book.annotation {
+            if !v.is_empty() {
             doc.add_text(self.fields.annotation, &v);
+                if self.use_stemmer {
+                    doc.add_text(self.fields.xannotation, &v);
+                }
+            }
         }
         if let Some(text) = &book.body {
             if body {
@@ -452,25 +468,42 @@ impl BookReader {
             .reload_policy(ReloadPolicy::OnCommit)
             .try_into()?;
         let default_fields: Vec<Field> = vec![
-            "title",
-            "author",
-            "src_author",
-            "translator",
-            "annotation",
-            "keyword",
-            "body",
-        ]
-        .iter()
-        .filter_map(|n| schema.get_field(n))
-        .collect();
-        let mut query_parser = QueryParser::for_index(&index, default_fields.clone());
-        query_parser.set_conjunction_by_default();
+            fields.title,
+            fields.author,
+            fields.src_author,
+            fields.translator,
+            fields.annotation,
+            fields.keyword,
+            fields.body,
+        ];
+        let stem_fields: Vec<Field> = vec![
+            fields.title,
+            fields.author,
+            fields.src_author,
+            fields.translator,
+            fields.annotation,
+            fields.keyword,
+            fields.body,
+            fields.xbody,
+            fields.xtitle,
+            fields.xannotation,
+        ];
+        let mut default_parser = QueryParser::for_index(&index, default_fields.clone());
+        default_parser.set_conjunction_by_default();
+        let mut stem_parser = QueryParser::for_index(&index, stem_fields.clone());
+        stem_parser.set_conjunction_by_default();
+        let mut stemmed_field_for = HashMap::new();
+        stemmed_field_for.insert("body".into(), "xbody".into());
+        stemmed_field_for.insert("title".into(), "xtitle".into());
+        stemmed_field_for.insert("annotation".into(), "xannotation".into());
         Ok(BookReader {
             reader,
             schema,
-            query_parser,
+            default_parser,
+            stem_parser,
             fields,
             default_fields,
+            stemmed_field_for
         })
     }
 
@@ -602,12 +635,13 @@ impl BookReader {
     pub fn search_as_json(
         &self,
         query: &str,
+        stem: bool,
         order: &str,
         limit: usize,
         offset: usize,
         debug: bool,
     ) -> Result<String> {
-        let query = self.parse_query(query, debug)?;
+        let query = self.parse_query(query, stem, debug)?;
         let docs = self.search_as_docs(&query, order, limit, offset, debug)?;
         let matches: Vec<String> = docs.iter().map(|doc| self.schema.to_json(doc)).collect();
         let total = self.reader.searcher().search(&query, &Count)?;
@@ -621,12 +655,13 @@ impl BookReader {
     pub fn search_as_meta(
         &self,
         query: &str,
+        stem: bool,
         order: &str,
         limit: usize,
         offset: usize,
         debug: bool,
     ) -> Result<Vec<BookMeta>> {
-        let query = self.parse_query(query, debug)?;
+        let query = self.parse_query(query, stem, debug)?;
         let docs = self.search_as_docs(&query, order, limit, offset, debug)?;
         let mut matches = Vec::new();
         for doc in docs {
@@ -645,11 +680,12 @@ impl BookReader {
                             filename = p2.map(|x| x.to_owned()).unwrap_or_default();
                         }
                         Some("genre") => {
+                            //skip level 1: "/genre/sf/sf_horror" -> "sf_horror"
                             if let Some(x) = p2 {
                                 genre.push(x.to_owned())
                             }
-                        } //skip level 1: "/genre/sf/sf_horror" -> "sf_horror"
-                        _ => (),
+                        } 
+                        _ => ()
                     }
                 }
             }
@@ -719,6 +755,7 @@ impl BookReader {
         &self,
         path: &str,
         query: Option<&str>,
+        stem: bool,
         hits: Option<usize>,
         debug: bool,
     ) -> Result<HashMap<String, u64>> {
@@ -726,7 +763,7 @@ impl BookReader {
         let mut facet_collector = FacetCollector::for_field(self.fields.facet);
         facet_collector.add_facet(path);
         let query = match query {
-            Some(q) => self.parse_query(q, debug).unwrap(),
+            Some(q) => self.parse_query(q, stem, debug).unwrap(),
             None => Box::new(AllQuery),
         };
         let facet_counts = searcher.search(&query, &facet_collector)?;
@@ -743,19 +780,21 @@ impl BookReader {
         Ok(facets)
     }
 
-    pub fn parse_query(&self, query: &str, debug: bool) -> Result<Box<dyn Query>> {
+    pub fn parse_query(&self, query: &str, stem: bool, debug: bool) -> Result<Box<dyn Query>> {
         //emulate wildcard queries (word* or word?) with regexes
         let mut words = vec![];
         let mut regexes = vec![];
         let mut fuzzy = vec![];
+        let field_re = Regex::new("^([a-z]+):(.+)").unwrap(); // field:query
         let looks_like_regex = Regex::new(r"[.\])][*+?]").unwrap(); //  foo.* | foo[0-9]+ | (foo)?
         let looks_like_wildcard = Regex::new(r"[*?]").unwrap(); // foo* | fo?
         let looks_like_fuzzy = Regex::new(r"~$").unwrap(); // foo~
+        let mut queries: Vec<(Occur, Box<dyn Query>)> = vec![];
 
-        //TODO: phrase quoting, now just split query to words
+        //simple split query to words
         for i in query.split_whitespace() {
             if i == "*" {
-                words.push(i);
+                words.push(i.to_string());
             } else if looks_like_regex.is_match(i) {
                 regexes.push(i.to_lowercase());
             } else if looks_like_wildcard.is_match(i) {
@@ -764,7 +803,23 @@ impl BookReader {
             } else if looks_like_fuzzy.is_match(i) {
                 fuzzy.push(i.to_lowercase());
             } else {
-                words.push(i);
+                //replace explicit field name to stemmed field name
+                let word = match stem {
+                    true =>
+                        match field_re.captures(&i) {
+                            Some(m) => {
+                                    let field_name = m.get(1).unwrap().as_str();
+                                    let query = m.get(2).unwrap().as_str();
+                                    match self.stemmed_field_for.get(field_name) {
+                                        Some(f) => format!("{}:{}", f, query),
+                                        None => i.to_string()
+                                    }
+                                }
+                            None => i.to_string()
+                        }
+                    false => i.to_string()
+                };
+                words.push(word);
             }
         }
         if debug {
@@ -773,17 +828,12 @@ impl BookReader {
                 words, regexes, fuzzy
             );
         }
-        let mut queries: Vec<(Occur, Box<dyn Query>)> = vec![];
         if !words.is_empty() {
             let std_query = words.join(" ");
-            let q = self.query_parser.parse_query(&std_query)?;
-            if regexes.is_empty() && fuzzy.is_empty() {
-                //regular query
-                return Ok(q);
-            }
+            let parser = if stem { &self.stem_parser } else { &self.default_parser };
+            let q = parser.parse_query(&std_query)?;
             queries.push((Occur::Must, q));
         }
-        let field_re = Regex::new("^([a-z]+):(.+)").unwrap();
         for i in regexes {
             if let Some(m) = field_re.captures(&i) {
                 let field_name = m.get(1).unwrap().as_str();
@@ -796,6 +846,7 @@ impl BookReader {
                 queries.push((Occur::Must, Box::new(q)));
             } else {
                 let mut subqueries: Vec<(Occur, Box<dyn Query>)> = vec![];
+                //search only non-stemmed fields
                 for field in self.default_fields.iter() {
                     let q = RegexQuery::from_pattern(&i, *field)?; //don't want directly use tantivy_fst::Regex
                     subqueries.push((Occur::Should, Box::new(q)));
@@ -819,6 +870,7 @@ impl BookReader {
             } else {
                 let mut subqueries: Vec<(Occur, Box<dyn Query>)> = vec![];
                 let (word, distance) = parse_fuzzy_pattern(&i);
+                //search only non-stemmed fields
                 for field in self.default_fields.iter() {
                     let term = Term::from_field_text(*field, &word);
                     let q = FuzzyTermQuery::new(term, distance, true);
