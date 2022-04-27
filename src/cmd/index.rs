@@ -421,7 +421,7 @@ pub fn run_index(args: &IndexArgs, app: Application) {
             zip_total_size / 1024 / 1024,
         );
         println!(
-            "{}: {} {}: {} {}, {} {} = {} {} / {} {}",
+            "{}: {} {}, {} {}, {} {} = {} {} / {} {}",
             tr!["Books", "Книг"],
             cstats.book_indexed,
             tr!["added", "добавлено"],
@@ -435,7 +435,7 @@ pub fn run_index(args: &IndexArgs, app: Application) {
             tr!["MB readed", "МБ прочитано"],
         );
         println!(
-            "{}: {} {}: {} MB/s",
+            "{}: {}, {}: {} MB/s",
             tr!["Duration", "Длительность"],
             format_duration(total),
             tr!["Average speed", "Средняя скорость"],
