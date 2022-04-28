@@ -82,7 +82,27 @@ struct CommitStats {
 pub fn run_index(args: &IndexArgs, app: Application) {
     let debug = app.debug;
     let delta = args.mode == IndexMode::Delta;
-    let batch_size = args.batch_size * 1024 * 1024; //MB->bytes
+    let mem = { 
+        use systemstat::{System, Platform};
+        let sys = System::new();
+        sys.memory().unwrap()
+    };
+    println!("Memory total: {}, free: {}", mem.total, mem.free);
+    let heap_memory = match args.heap_memory {
+        Some(x) => x*1024*1024, //MB->bytes
+        None => {
+            println!("using 1/4 of free memory as heap");
+            (mem.free.0 as usize)/4
+        }
+    };
+    let batch_size = match args.batch_size {
+        Some(x) => x*1024*1024, //MB->bytes
+        None => {
+            println!("using 1/4 of free memory as batch size");
+            (mem.free.0 as usize)/4
+        }
+    };
+
     app.load_genre_map();
     let genre_map = app.load_genre_map();
     let book_formats = &app.book_formats;
@@ -91,7 +111,7 @@ pub fn run_index(args: &IndexArgs, app: Application) {
     let mut any_lang = false;
     for i in &app.index_settings.langs {
         lang_set.insert(i.to_string());
-        if i == "ANY" {
+        if i.to_lowercase() == "any" {
             any_lang = true
         }
     }
@@ -115,8 +135,8 @@ pub fn run_index(args: &IndexArgs, app: Application) {
             args.read_threads,
             args.read_queue,
             args.index_threads,
-            args.heap_memory,
-            args.batch_size,
+            heap_memory,
+            batch_size,
         );
     }
     //save settings with index
@@ -135,7 +155,7 @@ pub fn run_index(args: &IndexArgs, app: Application) {
         &app.index_path,
         &app.index_settings.stemmer,
         args.index_threads,
-        args.heap_memory * 1024 * 1024,
+        heap_memory,
     )
     .unwrap();
     if debug {
@@ -602,3 +622,4 @@ where
     }
     res
 }
+

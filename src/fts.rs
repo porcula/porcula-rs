@@ -238,7 +238,7 @@ impl BookWriter {
             index,
             schema,
             fields,
-            use_stemmer: stemmer != "OFF",
+            use_stemmer: stemmer.to_lowercase() != "off",
         })
     }
 

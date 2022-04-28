@@ -117,23 +117,23 @@ pub struct IndexArgs {
     #[clap(short, long, help=tr!("Archive file name to reindex",
     "Имя отдельного архива для переиндексации"))]
     pub file: Vec<String>,
-    #[clap(short, long, use_value_delimiter=true, default_value = DEFAULT_LANGUAGE, help=tr!(
+    #[clap(short, long, use_value_delimiter=true, help=tr!(
         "Language of books, one or more",
         "Язык книг, можно несколько"
-    ), value_name = tr!("2 letter code | ANY", "2-буквенный код | ANY"))]
+    ), value_name = tr!("2 letter code | any", "2-буквенный код | any"))]
     pub lang: Vec<String>,
-    #[clap(short, long, help=tr!("Word stemmer", "Алгоритм определения основы слова"), value_name=tr!("language code | OFF", "код языка | OFF"))]
+    #[clap(short, long, help=tr!("Word stemmer", "Алгоритм определения основы слова"), value_name=tr!("language code | off", "код языка | off"))]
     pub stemmer: Option<String>,
-    #[clap(short = 'H', long, default_value_t = 100, help=tr!("Heap memory size", "Размер памяти"), value_name = "MB")]
-    pub heap_memory: usize,
+    #[clap(short = 'H', long, help=tr!("Heap memory size", "Размер памяти"), value_name = "MB")]
+    pub heap_memory: Option<usize>,
     #[clap(short, long, help=tr!("Number of indexing workers", "Число потоков индексирования"))]
     pub index_threads: Option<usize>,
     #[clap(short, long, default_value_t = 1, help=tr!("Number of read workers", "Число потоков чтения"))]
     pub read_threads: usize,
     #[clap(short='q', long, default_value_t=64, help=tr!("Length of read queue", "Длина очереди чтения"))]
     pub read_queue: usize,
-    #[clap(short='B', long, default_value_t=1024, help=tr!("Batch size between commits","Размер данных между сохранениями"), value_name="MB")]
-    pub batch_size: usize,
+    #[clap(short='B', long, help=tr!("Batch size between commits","Размер данных между сохранениями"), value_name="MB")]
+    pub batch_size: Option<usize>,
     #[clap(long, help=tr!("Index book's body", "Индексировать текст книги (без учёта склонения)"), value_name="on|off")]
     pub body: Option<OnOff>,
     #[clap(long, help=tr!("Index book's body with stemming", "Индексировать текст книги (по основам слов)"), value_name="on|off")]
@@ -228,7 +228,7 @@ impl IndexSettings {
             //file not exists yet - use defaults
             IndexSettings {
                 langs: vec![DEFAULT_LANGUAGE.to_string()],
-                stemmer: "OFF".to_string(),
+                stemmer: "off".to_string(),
                 books_dir: args.books_dir.clone(),
                 options: ParseOpts {
                     body: true,
