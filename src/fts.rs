@@ -207,7 +207,7 @@ impl BookWriter {
         index_dir: P,
         stemmer: &str,
         num_threads: Option<usize>,
-        heap_size: usize,
+        memory_size: usize,
     ) -> Result<BookWriter> {
         let (index, schema, fields) = match Index::open_in_dir(&index_dir) {
             Ok(index) => {
@@ -229,8 +229,8 @@ impl BookWriter {
         tokenizers.register(STEMMED_TOKENIZER_NAME, get_stemmed_tokenizer(stemmer));
 
         let writer = match num_threads {
-            Some(n) if n > 0 => index.writer_with_num_threads(n, heap_size)?,
-            _ => index.writer(heap_size)?,
+            Some(n) if n > 0 => index.writer_with_num_threads(n, memory_size)?,
+            _ => index.writer(memory_size)?,
         };
 
         Ok(BookWriter {

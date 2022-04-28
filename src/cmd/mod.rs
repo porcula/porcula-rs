@@ -124,8 +124,8 @@ pub struct IndexArgs {
     pub lang: Vec<String>,
     #[clap(short, long, help=tr!("Word stemmer", "Алгоритм определения основы слова"), value_name=tr!("language code | off", "код языка | off"))]
     pub stemmer: Option<String>,
-    #[clap(short = 'H', long, help=tr!("Heap memory size", "Размер памяти"), value_name = "MB")]
-    pub heap_memory: Option<usize>,
+    #[clap(short, long, help=tr!("Memory size", "Размер памяти"), value_name = "MB")]
+    pub memory_size: Option<usize>,
     #[clap(short, long, help=tr!("Number of indexing workers", "Число потоков индексирования"))]
     pub index_threads: Option<usize>,
     #[clap(short, long, default_value_t = 1, help=tr!("Number of read workers", "Число потоков чтения"))]

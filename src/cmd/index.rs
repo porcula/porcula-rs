@@ -88,7 +88,7 @@ pub fn run_index(args: &IndexArgs, app: Application) {
         sys.memory().unwrap()
     };
     println!("Memory total: {}, free: {}", mem.total, mem.free);
-    let heap_memory = match args.heap_memory {
+    let memory_size = match args.memory_size {
         Some(x) => x*1024*1024, //MB->bytes
         None => {
             println!("using 1/4 of free memory as heap");
@@ -135,7 +135,7 @@ pub fn run_index(args: &IndexArgs, app: Application) {
             args.read_threads,
             args.read_queue,
             args.index_threads,
-            heap_memory,
+            memory_size,
             batch_size,
         );
     }
@@ -155,7 +155,7 @@ pub fn run_index(args: &IndexArgs, app: Application) {
         &app.index_path,
         &app.index_settings.stemmer,
         args.index_threads,
-        heap_memory,
+        memory_size,
     )
     .unwrap();
     if debug {
