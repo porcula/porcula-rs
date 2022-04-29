@@ -1,3 +1,4 @@
+use log::{debug, error};
 use rand::Rng;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
@@ -87,10 +88,10 @@ pub struct BookReader {
     reader: IndexReader,
     schema: Schema,
     default_parser: QueryParser, //search in main fields without stemming
-    stem_parser: QueryParser, //search in main fields with and without stemming
+    stem_parser: QueryParser,    //search in main fields with and without stemming
     fields: Fields,
     default_fields: Vec<Field>,
-    stemmed_field_for: HashMap<String,String>, //non-stemmed-field name -> stemmed-field name
+    stemmed_field_for: HashMap<String, String>, //non-stemmed-field name -> stemmed-field name
 }
 
 impl Fields {
@@ -127,7 +128,8 @@ impl Fields {
             xbody: schema_builder.add_text_field("xbody", nonstored_stemmed_text_opts.clone()),
             cover_image: schema_builder.add_text_field("cover_image", STORED),
             xtitle: schema_builder.add_text_field("xtitle", nonstored_stemmed_text_opts.clone()),
-            xannotation: schema_builder.add_text_field("xannotation", nonstored_stemmed_text_opts.clone()),
+            xannotation: schema_builder
+                .add_text_field("xannotation", nonstored_stemmed_text_opts.clone()),
         }
     }
 
@@ -363,7 +365,7 @@ impl BookWriter {
         }
         if let Some(v) = &book.annotation {
             if !v.is_empty() {
-            doc.add_text(self.fields.annotation, &v);
+                doc.add_text(self.fields.annotation, &v);
                 if self.use_stemmer {
                     doc.add_text(self.fields.xannotation, &v);
                 }
@@ -395,7 +397,7 @@ impl BookWriter {
             Err(TantivyError::OpenWriteError(
                 tantivy::directory::error::OpenWriteError::IoError { io_error, filepath },
             )) if io_error.kind() == std::io::ErrorKind::PermissionDenied => {
-                eprintln!(
+                error!(
                     "retry after error: {} at {}",
                     io_error,
                     filepath.to_string_lossy()
@@ -503,7 +505,7 @@ impl BookReader {
             stem_parser,
             fields,
             default_fields,
-            stemmed_field_for
+            stemmed_field_for,
         })
     }
 
@@ -571,12 +573,9 @@ impl BookReader {
         order: &str,
         limit: usize,
         offset: usize,
-        debug: bool,
     ) -> Result<Vec<Document>> {
         let searcher = self.reader.searcher();
-        if debug {
-            println!("debug: query={:?} order={}", query, order);
-        }
+        debug!("query={:?} order={}", query, order);
         let mut docs = Vec::new();
         if order == "default" {
             let top_docs = searcher.search(query, &TopDocs::with_limit(limit + offset))?;
@@ -639,10 +638,9 @@ impl BookReader {
         order: &str,
         limit: usize,
         offset: usize,
-        debug: bool,
     ) -> Result<String> {
-        let query = self.parse_query(query, stem, debug)?;
-        let docs = self.search_as_docs(&query, order, limit, offset, debug)?;
+        let query = self.parse_query(query, stem)?;
+        let docs = self.search_as_docs(&query, order, limit, offset)?;
         let matches: Vec<String> = docs.iter().map(|doc| self.schema.to_json(doc)).collect();
         let total = self.reader.searcher().search(&query, &Count)?;
         Ok(format!(
@@ -659,10 +657,9 @@ impl BookReader {
         order: &str,
         limit: usize,
         offset: usize,
-        debug: bool,
     ) -> Result<Vec<BookMeta>> {
-        let query = self.parse_query(query, stem, debug)?;
-        let docs = self.search_as_docs(&query, order, limit, offset, debug)?;
+        let query = self.parse_query(query, stem)?;
+        let docs = self.search_as_docs(&query, order, limit, offset)?;
         let mut matches = Vec::new();
         for doc in docs {
             let mut zipfile = "".to_string();
@@ -684,8 +681,8 @@ impl BookReader {
                             if let Some(x) = p2 {
                                 genre.push(x.to_owned())
                             }
-                        } 
-                        _ => ()
+                        }
+                        _ => (),
                     }
                 }
             }
@@ -757,13 +754,12 @@ impl BookReader {
         query: Option<&str>,
         stem: bool,
         hits: Option<usize>,
-        debug: bool,
     ) -> Result<HashMap<String, u64>> {
         let searcher = self.reader.searcher();
         let mut facet_collector = FacetCollector::for_field(self.fields.facet);
         facet_collector.add_facet(path);
         let query = match query {
-            Some(q) => self.parse_query(q, stem, debug).unwrap(),
+            Some(q) => self.parse_query(q, stem).unwrap(),
             None => Box::new(AllQuery),
         };
         let facet_counts = searcher.search(&query, &facet_collector)?;
@@ -780,7 +776,7 @@ impl BookReader {
         Ok(facets)
     }
 
-    pub fn parse_query(&self, query: &str, stem: bool, debug: bool) -> Result<Box<dyn Query>> {
+    pub fn parse_query(&self, query: &str, stem: bool) -> Result<Box<dyn Query>> {
         //emulate wildcard queries (word* or word?) with regexes
         let mut words = vec![];
         let mut regexes = vec![];
@@ -805,32 +801,33 @@ impl BookReader {
             } else {
                 //replace explicit field name to stemmed field name
                 let word = match stem {
-                    true =>
-                        match field_re.captures(&i) {
-                            Some(m) => {
-                                    let field_name = m.get(1).unwrap().as_str();
-                                    let query = m.get(2).unwrap().as_str();
-                                    match self.stemmed_field_for.get(field_name) {
-                                        Some(f) => format!("{}:{}", f, query),
-                                        None => i.to_string()
-                                    }
-                                }
-                            None => i.to_string()
+                    true => match field_re.captures(&i) {
+                        Some(m) => {
+                            let field_name = m.get(1).unwrap().as_str();
+                            let query = m.get(2).unwrap().as_str();
+                            match self.stemmed_field_for.get(field_name) {
+                                Some(f) => format!("{}:{}", f, query),
+                                None => i.to_string(),
+                            }
                         }
-                    false => i.to_string()
+                        None => i.to_string(),
+                    },
+                    false => i.to_string(),
                 };
                 words.push(word);
             }
         }
-        if debug {
-            println!(
-                "debug: words={:?} regexes={:?} fuzzy={:?}",
-                words, regexes, fuzzy
-            );
-        }
+        debug!(
+            "debug: words={:?} regexes={:?} fuzzy={:?}",
+            words, regexes, fuzzy
+        );
         if !words.is_empty() {
             let std_query = words.join(" ");
-            let parser = if stem { &self.stem_parser } else { &self.default_parser };
+            let parser = if stem {
+                &self.stem_parser
+            } else {
+                &self.default_parser
+            };
             let q = parser.parse_query(&std_query)?;
             queries.push((Occur::Must, q));
         }

@@ -1,4 +1,5 @@
 use clap::{Args, Parser, Subcommand};
+use log::{debug, error};
 use serde::{Deserialize, Serialize};
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -151,7 +152,9 @@ pub struct ServerArgs {
 }
 impl ServerArgs {
     pub fn default() -> Self {
-        ServerArgs{ listen: DEFAULT_LISTEN_ADDR.into() }
+        ServerArgs {
+            listen: DEFAULT_LISTEN_ADDR.into(),
+        }
     }
 }
 
@@ -203,13 +206,11 @@ impl IndexSettings {
         let index_path = Path::new(&args.index_dir).to_path_buf();
         let filename = index_path.join(INDEX_SETTINGS_FILE);
         let mut res: IndexSettings = if let Ok(f) = std::fs::File::open(&filename) {
-            if args.debug {
-                println!(
-                    "{} {}",
-                    tr!["Reading settings", "Читаем настройки"],
-                    filename.display()
-                );
-            }
+            debug!(
+                "{} {}",
+                tr!["Reading settings", "Читаем настройки"],
+                filename.display()
+            );
             match serde_json::from_reader(f) {
                 Ok(s) => s,
                 Err(e) => {
@@ -324,7 +325,7 @@ impl Application {
             GenreMap::load(&mut f)
         };
         maybe_map.unwrap_or_else(|_| {
-            eprintln!(
+            error!(
                 "{}: {}",
                 tr!["Invalid file format", "Неправильный формат файла"],
                 GENRE_MAP_FILENAME

@@ -1,18 +1,9 @@
-extern crate clap;
-extern crate image;
-extern crate quick_xml;
-extern crate rand;
-extern crate regex;
-extern crate serde;
-extern crate serde_json;
-extern crate tantivy;
-extern crate zip;
 #[macro_use]
 extern crate rouille;
 #[macro_use]
 extern crate lazy_static;
-extern crate deepsize;
 
+use log::{debug, error, LevelFilter};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -33,22 +24,30 @@ use crate::types::*;
 fn main() {
     std::env::set_var("RUST_BACKTRACE", "1"); //force backtrace in every environment
     let args = cmd::parse_args();
-    if args.debug {
-        println!("{:?}", args);
-    }
+    env_logger::Builder::new()
+        .filter_level(if args.debug {
+            LevelFilter::Debug
+        } else {
+            LevelFilter::Info
+        })
+        .format_timestamp_secs()
+        .filter_module("tantivy", LevelFilter::Warn)
+        .parse_default_env()
+        .init();
+    debug!("{:?}", args);
 
     let index_path = Path::new(&args.index_dir).to_path_buf();
     //auto-create index directory when indexing
     if !index_path.exists() {
         if let Some(cmd::Command::Index(_)) = args.command {
             match std::fs::create_dir(&index_path) {
-                Ok(()) => eprintln!(
+                Ok(()) => error!(
                     "{}: {}",
                     tr!["Directory created", "Создан каталог"],
                     index_path.canonicalize().unwrap().display()
                 ),
                 Err(e) => {
-                    eprintln!(
+                    error!(
                         "{}: {}",
                         tr!["Error creating directory", "Ошибка создания каталога"],
                         e
@@ -57,7 +56,7 @@ fn main() {
                 }
             }
         } else {
-            eprintln!(
+            error!(
                 "{}: {}",
                 tr![
                     "Creating non-existent index directory",
@@ -70,7 +69,7 @@ fn main() {
     //canonicalize() DON'T WORK ON WINDOWS WITH DIRECTORY SYMLINK
     #[cfg(not(target_os = "windows"))]
     let index_path = index_path.canonicalize().unwrap_or_else(|e| {
-        eprintln!(
+        error!(
             "{}: {}\n{}\n{}",
             tr!["Not found index directory", "Не найден индексный каталог"],
             index_path.display(),
@@ -84,13 +83,13 @@ fn main() {
     });
 
     let index_settings = IndexSettings::load(&args).unwrap_or_else(|e| {
-        eprintln!("{}", e);
+        error!("{}", e);
         std::process::exit(1);
     });
 
     let mut books_path = Path::new(&index_settings.books_dir).to_path_buf();
     books_path = books_path.canonicalize().unwrap_or_else(|_| {
-        eprintln!(
+        error!(
             "{}: {}\n{}",
             tr!["Not found books directory", "Не найден каталог с книгами"],
             index_settings.books_dir,

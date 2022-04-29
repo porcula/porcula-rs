@@ -1,3 +1,4 @@
+use log::{debug, error, info};
 use rayon::prelude::*;
 use regex::Regex;
 use std::collections::HashSet;
@@ -80,26 +81,25 @@ struct CommitStats {
 
 #[allow(clippy::cognitive_complexity)]
 pub fn run_index(args: &IndexArgs, app: Application) {
-    let debug = app.debug;
     let delta = args.mode == IndexMode::Delta;
-    let mem = { 
-        use systemstat::{System, Platform};
+    let mem = {
+        use systemstat::{Platform, System};
         let sys = System::new();
         sys.memory().unwrap()
     };
-    println!("Memory total: {}, free: {}", mem.total, mem.free);
+    info!("Memory total: {}, free: {}", mem.total, mem.free);
     let memory_size = match args.memory_size {
-        Some(x) => x*1024*1024, //MB->bytes
+        Some(x) => x * 1024 * 1024, //MB->bytes
         None => {
-            println!("using 1/4 of free memory as heap");
-            (mem.free.0 as usize)/4
+            debug!("using 1/4 of free memory as heap");
+            (mem.free.0 as usize) / 4
         }
     };
     let batch_size = match args.batch_size {
-        Some(x) => x*1024*1024, //MB->bytes
+        Some(x) => x * 1024 * 1024, //MB->bytes
         None => {
-            println!("using 1/4 of free memory as batch size");
-            (mem.free.0 as usize)/4
+            debug!("using 1/4 of free memory as batch size");
+            (mem.free.0 as usize) / 4
         }
     };
 
@@ -119,7 +119,7 @@ pub fn run_index(args: &IndexArgs, app: Application) {
     let lang_filter = |lang: &str| any_lang || lang_set.contains(lang) || lang.is_empty();
     let opts = &app.index_settings.options;
 
-    println!(
+    info!(
         "----{}----\ndir={} delta={} lang={:?} stemmer={} body={} xbody={} annotation={} cover={} files={:?}",
         tr!["START INDEXING","НАЧИНАЕМ ИНДЕКСАЦИЮ"],
         &app.books_path.display(),
@@ -129,24 +129,16 @@ pub fn run_index(args: &IndexArgs, app: Application) {
         opts.body, opts.xbody, opts.annotation, opts.cover,
         app.book_formats.keys()
     );
-    if debug {
-        println!(
-            "read threads={} read queue={} index threads={:?} heap={} batch={}",
-            args.read_threads,
-            args.read_queue,
-            args.index_threads,
-            memory_size,
-            batch_size,
-        );
-    }
+    debug!(
+        "read threads={} read queue={} index threads={:?} heap={} batch={}",
+        args.read_threads, args.read_queue, args.index_threads, memory_size, batch_size,
+    );
     //save settings with index
-    if debug {
-        println!("store settings in {}", app.index_path.display());
-    }
+    debug!("store settings in {}", app.index_path.display());
     app.index_settings
         .save(&app.index_path)
         .unwrap_or_else(|e| {
-            eprintln!("{}", e);
+            error!("{}", e);
             std::process::exit(2);
         });
 
@@ -158,16 +150,12 @@ pub fn run_index(args: &IndexArgs, app: Application) {
         memory_size,
     )
     .unwrap();
-    if debug {
-        println!("merge policy: {}", book_writer.debug_merge_policy());
-    }
+    debug!("merge policy: {}", book_writer.debug_merge_policy());
 
     //enforce reindex of books inside specified files
     let indexed_books = match args.file.is_empty() && delta {
         true => {
-            if debug {
-                println!("loading list of indexed files");
-            }
+            debug!("loading list of indexed files");
             let book_reader = app.open_book_reader().unwrap();
             Some(
                 book_reader
@@ -196,7 +184,7 @@ pub fn run_index(args: &IndexArgs, app: Application) {
     });
 
     if !delta {
-        println!("{}", tr!["deleting index...", "очищаем индекс..."]);
+        info!("{}", tr!["deleting index...", "очищаем индекс..."]);
         book_writer.delete_all_books().unwrap();
     }
 
@@ -204,7 +192,7 @@ pub fn run_index(args: &IndexArgs, app: Application) {
     let canceled = Arc::new(AtomicBool::new(false));
     let c = canceled.clone();
     ctrlc::set_handler(move || {
-        eprintln!("Cancel indexing...");
+        info!("Cancel indexing...");
         c.store(true, Ordering::SeqCst);
     })
     .expect("Error setting Ctrl-C handler");
@@ -241,7 +229,7 @@ pub fn run_index(args: &IndexArgs, app: Application) {
                             }
                             Err(e) => {
                                 stats.error_count += 1;
-                                eprintln!(
+                                error!(
                                     "{}/{} -> {} {}",
                                     entry.zipfile,
                                     entry.filename,
@@ -261,33 +249,23 @@ pub fn run_index(args: &IndexArgs, app: Application) {
                 }
                 if uncommited_size > batch_size {
                     uncommited_size = 0;
-                    if debug {
-                        println!("--------------Commit: start");
-                    }
+                    debug!("--------------Commit: start");
                     let ct = Instant::now();
                     book_writer.commit().unwrap();
                     stats.time_to_commit += ct.elapsed();
-                    if debug {
-                        println!("--------------Commit: done");
-                    }
+                    debug!("--------------Commit: done");
                 }
             }
             //final commit
-            if debug {
-                println!("Final commit: start");
-            }
+            debug!("Final commit: start");
             let ct = Instant::now();
             book_writer.commit().unwrap();
             if !commit_canceled.load(Ordering::SeqCst) {
-                if debug {
-                    println!("Waiting for merging threads");
-                }
+                debug!("Waiting for merging threads");
                 book_writer.wait_merging_threads().unwrap();
             }
             stats.time_to_commit += ct.elapsed();
-            if debug {
-                println!("Final commit: done");
-            }
+            debug!("Final commit: done");
             stats
         });
 
@@ -305,7 +283,7 @@ pub fn run_index(args: &IndexArgs, app: Application) {
             let zipfile = os_filename.to_str().expect("invalid filename");
             if let Some(indexed) = &indexed_books {
                 if let Some(IndexedFiles::Whole) = indexed.get(zipfile) {
-                    println!(
+                    info!(
                         "[{}/{}] {} {}",
                         zip_index + 1,
                         zip_total_count,
@@ -319,7 +297,7 @@ pub fn run_index(args: &IndexArgs, app: Application) {
             }
             zip_processed += 1;
             zip_progress_size += zip_size;
-            println!(
+            info!(
                 "[{}/{}={}%] {} {}",
                 zip_index + 1,
                 zip_total_count,
@@ -360,14 +338,12 @@ pub fn run_index(args: &IndexArgs, app: Application) {
                             Some(s) => s,
                             None => file.name().into(),
                         };
-                        if debug {
-                            println!("[{}%] {}/{}", zip_progress_pct, &zipfile, &filename);
-                        }
+                        debug!("[{}%] {}/{}", zip_progress_pct, &zipfile, &filename);
                         let mut process_book = true;
                         if let Some(indexed) = &indexed_books {
                             if let Some(IndexedFiles::List(files)) = indexed.get(zipfile) {
                                 if files.contains(&filename) {
-                                    println!("  {} {}", &filename, tr!["indexed", "индексирован"]);
+                                    info!("  {} {}", &filename, tr!["indexed", "индексирован"]);
                                     stats.book_skipped += 1;
                                     process_book = false;
                                 }
@@ -385,7 +361,6 @@ pub fn run_index(args: &IndexArgs, app: Application) {
                                 lang_filter,
                                 book_formats,
                                 opts,
-                                debug,
                             );
                             stats.parsed_size += parsed_book.parsed_size;
                             stats.time_to_parse += parsed_book.time_to_parse;
@@ -425,12 +400,12 @@ pub fn run_index(args: &IndexArgs, app: Application) {
         let total = tt.elapsed().as_millis() + 1;
         let canceled = canceled.load(Ordering::SeqCst);
         if canceled {
-            println!("{}", tr!["Indexing canceled", "Индексация прервана"]);
+            info!("{}", tr!["Indexing canceled", "Индексация прервана"]);
         } else {
-            println!("{}", tr!["Indexing done", "Индексация завершена"]);
+            info!("{}", tr!["Indexing done", "Индексация завершена"]);
         }
 
-        println!(
+        info!(
             "{}: {}/{}, {} {} = {}/{} MB",
             tr!["Archives", "Архивов"],
             zip_processed,
@@ -440,7 +415,7 @@ pub fn run_index(args: &IndexArgs, app: Application) {
             gstats.packed_size / 1024 / 1024,
             zip_total_size / 1024 / 1024,
         );
-        println!(
+        info!(
             "{}: {} {}, {} {}, {} {} = {} {} / {} {}",
             tr!["Books", "Книг"],
             cstats.book_indexed,
@@ -454,26 +429,26 @@ pub fn run_index(args: &IndexArgs, app: Application) {
             gstats.unpacked_size / 1024 / 1024,
             tr!["MB readed", "МБ прочитано"],
         );
-        println!(
+        info!(
             "{}: {}, {}: {} MB/s",
             tr!["Duration", "Длительность"],
             format_duration(total),
             tr!["Average speed", "Средняя скорость"],
             (gstats.unpacked_size as u128) / total * 1000 / 1024 / 1024,
         );
-        println!(
+        info!(
             "{}: {}, {}: {}",
             tr!["Errors", "Ошибок"],
             gstats.error_count + cstats.error_count,
             tr!["Warnings", "Предупреждений"],
             gstats.warning_count,
         );
-        if debug {
+        if log::log_enabled!(log::Level::Debug) {
             let ue = gstats.time_to_unzip.as_millis() / args.read_threads as u128;
             let pe = gstats.time_to_parse.as_millis() / args.read_threads as u128;
             let ie = gstats.time_to_image.as_millis() / args.read_threads as u128;
             let ce = cstats.time_to_commit.as_millis();
-            println!(
+            debug!(
                 "unpacking {}%, parse {}%, image resize {}%, commit {}%",
                 ue * 100 / total,
                 pe * 100 / total,
@@ -539,7 +514,6 @@ fn process_file<F>(
     lang_filter: F,
     book_formats: &BookFormats,
     opts: &ParseOpts,
-    debug: bool,
 ) -> ParsedBook
 where
     F: Fn(&str) -> bool,
@@ -564,9 +538,7 @@ where
         match parsed_book {
             Ok(mut b) => {
                 res.warning_count += b.warning.len();
-                if debug {
-                    println!("  {}/{} -> {}", zipfile, filename, &b)
-                }
+                debug!("  {}/{} -> {}", zipfile, filename, &b);
                 let lang = if !b.lang.is_empty() { &b.lang[0] } else { "" };
                 if lang_filter(lang) {
                     if let Some(img) = b.cover_image {
@@ -578,7 +550,7 @@ where
                         ) {
                             Ok(resized) => b.cover_image = Some(resized),
                             Err(e) => {
-                                eprintln!(
+                                error!(
                                     "{}/{} -> {} {}",
                                     zipfile,
                                     filename,
@@ -598,7 +570,7 @@ where
                     res.state = BookState::Valid(Box::new(b));
                 } else {
                     res.state = BookState::Ignored;
-                    println!(
+                    info!(
                         "{}/{} -> {} {}",
                         zipfile,
                         filename,
@@ -609,7 +581,7 @@ where
             }
             Err(e) => {
                 res.state = BookState::Invalid;
-                eprintln!(
+                error!(
                     "{}/{} -> {} {}",
                     zipfile,
                     filename,
@@ -622,4 +594,3 @@ where
     }
     res
 }
-

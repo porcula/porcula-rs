@@ -1,6 +1,7 @@
 use atom_syndication::{
     Category, ContentBuilder, Entry, EntryBuilder, FeedBuilder, LinkBuilder, Person,
 };
+use log::{debug, error, info};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use rouille::{Request, Response};
 use std::collections::{BTreeMap, HashMap};
@@ -18,43 +19,40 @@ const OPDS_PAGE_ENTRIES: usize = 20;
 
 pub fn run_server(args: &ServerArgs, app: Application) {
     let fts = app.open_book_reader().unwrap_or_else(|e| {
-        eprintln!("{}", e);
+        error!("{}", e);
         std::process::exit(4);
     });
-    println!(
+    info!(
         "{}: {}",
         tr!["Index dir", "Индекс"],
         &app.index_path.display()
     );
-    println!(
+    info!(
         "{}: {}",
         tr!["Books dir", "Книги "],
         &app.books_path.display()
     );
-    println!(
+    info!(
         "{}: {:?}",
         tr!["Language", "Язык"],
         &app.index_settings.langs
     );
-    println!(
+    info!(
         "{}: {:?}",
         tr!["Stemmer", "Стеммер"],
         &app.index_settings.stemmer
     );
-    println!("{:?}", &app.index_settings.options);
-    println!(
+    info!("{:?}", &app.index_settings.options);
+    info!(
         "{}: http://{}/porcula/home.html",
         tr!["Application", "Приложение"],
         &args.listen
     );
     let genre_map = app.load_genre_map();
-    let debug = app.debug;
 
     #[allow(clippy::cognitive_complexity, clippy::manual_strip)]
     rouille::start_server(&args.listen, move |req| {
-        if debug {
-            println!("req {}", req.raw_url())
-        }
+        debug!("req {}", req.raw_url());
         let mut req = req;
         let req_no_prefix;
 
@@ -81,8 +79,8 @@ pub fn run_server(args: &ServerArgs, app: Application) {
 
         router!(req,
             (GET) (/book/count) => { handler_count(req, &fts) },
-            (GET) (/search) => { handler_search(req, &fts, debug) },
-            (GET) (/facet) => { handler_facet(req, &fts, debug) },
+            (GET) (/search) => { handler_search(req, &fts) },
+            (GET) (/facet) => { handler_facet(req, &fts) },
             (GET) (/genre/translation) => { Response::json(&genre_map.translation) },
             (GET) (/book/{zipfile: String}/{filename: String}/cover) => { handler_cover(req, &fts, &zipfile, &filename) },
             (GET) (/book/{zipfile: String}/{filename: String}/render) => { handler_render(req, &fts, &app, &zipfile, &filename) },
@@ -152,10 +150,10 @@ fn handler_count(_req: &Request, fts: &BookReader) -> Response {
     }
 }
 
-fn handler_search(req: &Request, fts: &BookReader, debug: bool) -> Response {
+fn handler_search(req: &Request, fts: &BookReader) -> Response {
     match req.get_param("query") {
         Some(query) => {
-            let stem = req.get_param("stem").unwrap_or_default()=="1";
+            let stem = req.get_param("stem").unwrap_or_default() == "1";
             let limit: usize = req
                 .get_param("limit")
                 .unwrap_or_default()
@@ -169,7 +167,7 @@ fn handler_search(req: &Request, fts: &BookReader, debug: bool) -> Response {
             let order: String = req
                 .get_param("order")
                 .unwrap_or_else(|| String::from("default"));
-            match fts.search_as_json(&query, stem, &order, limit, offset, debug) {
+            match fts.search_as_json(&query, stem, &order, limit, offset) {
                 Ok(json) => Response::from_data("application/json", json).with_no_cache(),
                 Err(e) => Response::text(e.to_string()).with_status_code(500),
             }
@@ -178,7 +176,7 @@ fn handler_search(req: &Request, fts: &BookReader, debug: bool) -> Response {
     }
 }
 
-fn handler_facet(req: &Request, fts: &BookReader, debug: bool) -> Response {
+fn handler_facet(req: &Request, fts: &BookReader) -> Response {
     let hits: Option<usize> = req
         .get_param("hits")
         .map(|x| x.parse().unwrap_or(DEFAULT_QUERY_HITS));
@@ -187,9 +185,9 @@ fn handler_facet(req: &Request, fts: &BookReader, debug: bool) -> Response {
         Some(ref s) if !s.is_empty() => Some(s.as_str()),
         _ => None,
     };
-    let stem = req.get_param("stem").unwrap_or_default()=="1";
+    let stem = req.get_param("stem").unwrap_or_default() == "1";
     match req.get_param("path") {
-        Some(path) => match fts.get_facet(&path, opt_query, stem, hits, debug) {
+        Some(path) => match fts.get_facet(&path, opt_query, stem, hits) {
             Ok(ref data) => Response::json(data).with_no_cache(),
             Err(e) => Response::text(e.to_string()).with_status_code(500),
         },
@@ -557,7 +555,7 @@ fn opds_facet(
         Some(x) => format!("/{}/{}", facet, x),
         None => format!("/{}", facet),
     };
-    match fts.get_facet(&path, None, false, None, false) {
+    match fts.get_facet(&path, None, false, None) {
         Ok(data) => {
             let mut arr: Vec<(String, u64, String)> = data
                 .into_iter()
@@ -640,7 +638,7 @@ fn opds_search_books(
         path_parts[n] = format!("{}", page - 1);
         Some(path_parts.join("/"))
     };
-    match fts.search_as_meta(query, stem, order, limit, offset, false) {
+    match fts.search_as_meta(query, stem, order, limit, offset) {
         Ok(data) => {
             let next_url = if data.len() < limit {
                 None
