@@ -85,12 +85,12 @@ pub struct BookWriter {
 }
 
 pub struct BookReader {
+    index: Index,
     reader: IndexReader,
     schema: Schema,
-    default_parser: QueryParser, //search in main fields without stemming
-    stem_parser: QueryParser,    //search in main fields with and without stemming
     fields: Fields,
-    default_fields: Vec<Field>,
+    def_fields_no_stem: Vec<Field>,
+    def_fields_stem: Vec<Field>,
     stemmed_field_for: HashMap<String, String>, //non-stemmed-field name -> stemmed-field name
 }
 
@@ -469,7 +469,7 @@ impl BookReader {
             .reader_builder()
             .reload_policy(ReloadPolicy::OnCommit)
             .try_into()?;
-        let default_fields: Vec<Field> = vec![
+        let def_fields_no_stem: Vec<Field> = vec![
             fields.title,
             fields.author,
             fields.src_author,
@@ -478,7 +478,7 @@ impl BookReader {
             fields.keyword,
             fields.body,
         ];
-        let stem_fields: Vec<Field> = vec![
+        let def_fields_stem: Vec<Field> = vec![
             fields.title,
             fields.author,
             fields.src_author,
@@ -490,24 +490,33 @@ impl BookReader {
             fields.xtitle,
             fields.xannotation,
         ];
-        let mut default_parser = QueryParser::for_index(&index, default_fields.clone());
-        default_parser.set_conjunction_by_default();
-        let mut stem_parser = QueryParser::for_index(&index, stem_fields.clone());
-        stem_parser.set_conjunction_by_default();
         let mut stemmed_field_for = HashMap::new();
         stemmed_field_for.insert("body".into(), "xbody".into());
         stemmed_field_for.insert("title".into(), "xtitle".into());
         stemmed_field_for.insert("annotation".into(), "xannotation".into());
         Ok(BookReader {
+            index,
             reader,
             schema,
-            default_parser,
-            stem_parser,
             fields,
-            default_fields,
+            def_fields_no_stem,
+            def_fields_stem,
             stemmed_field_for,
         })
     }
+
+    ///parser for search in default fields with|without stemming, with disjunction|disjunction by default
+    fn get_parser(&self, stemming: bool, disjunction: bool) -> QueryParser {
+        let mut parser = QueryParser::for_index(
+            &self.index, 
+            if stemming { self.def_fields_stem.clone() } else { self.def_fields_no_stem.clone() }
+        );
+        if !disjunction {
+          parser.set_conjunction_by_default();
+        }
+        parser
+    }
+
 
     /// Extract list of indexed files
     /// compact==Compact: Get complete zipfiles plus books of incomplete zipfiles
@@ -634,12 +643,13 @@ impl BookReader {
     pub fn search_as_json(
         &self,
         query: &str,
-        stem: bool,
+        stemming: bool,
+        disjunction: bool,
         order: &str,
         limit: usize,
         offset: usize,
     ) -> Result<String> {
-        let query = self.parse_query(query, stem)?;
+        let query = self.parse_query(query, stemming, disjunction)?;
         let docs = self.search_as_docs(&query, order, limit, offset)?;
         let matches: Vec<String> = docs.iter().map(|doc| self.schema.to_json(doc)).collect();
         let total = self.reader.searcher().search(&query, &Count)?;
@@ -653,12 +663,13 @@ impl BookReader {
     pub fn search_as_meta(
         &self,
         query: &str,
-        stem: bool,
+        stemming: bool,
+        disjunction: bool,
         order: &str,
         limit: usize,
         offset: usize,
     ) -> Result<Vec<BookMeta>> {
-        let query = self.parse_query(query, stem)?;
+        let query = self.parse_query(query, stemming, disjunction)?;
         let docs = self.search_as_docs(&query, order, limit, offset)?;
         let mut matches = Vec::new();
         for doc in docs {
@@ -752,14 +763,15 @@ impl BookReader {
         &self,
         path: &str,
         query: Option<&str>,
-        stem: bool,
+        stemming: bool,
+        disjunction: bool,
         hits: Option<usize>,
     ) -> Result<HashMap<String, u64>> {
         let searcher = self.reader.searcher();
         let mut facet_collector = FacetCollector::for_field(self.fields.facet);
         facet_collector.add_facet(path);
         let query = match query {
-            Some(q) => self.parse_query(q, stem).unwrap(),
+            Some(q) => self.parse_query(q, stemming, disjunction).unwrap(),
             None => Box::new(AllQuery),
         };
         let facet_counts = searcher.search(&query, &facet_collector)?;
@@ -776,7 +788,7 @@ impl BookReader {
         Ok(facets)
     }
 
-    pub fn parse_query(&self, query: &str, stem: bool) -> Result<Box<dyn Query>> {
+    pub fn parse_query(&self, query: &str, stemming: bool, disjunction: bool) -> Result<Box<dyn Query>> {
         //emulate wildcard queries (word* or word?) with regexes
         let mut words = vec![];
         let mut regexes = vec![];
@@ -800,7 +812,7 @@ impl BookReader {
                 fuzzy.push(i.to_lowercase());
             } else {
                 //replace explicit field name to stemmed field name
-                let word = match stem {
+                let word = match stemming {
                     true => match field_re.captures(&i) {
                         Some(m) => {
                             let field_name = m.get(1).unwrap().as_str();
@@ -823,11 +835,7 @@ impl BookReader {
         );
         if !words.is_empty() {
             let std_query = words.join(" ");
-            let parser = if stem {
-                &self.stem_parser
-            } else {
-                &self.default_parser
-            };
+            let parser = self.get_parser(stemming, disjunction);
             let q = parser.parse_query(&std_query)?;
             queries.push((Occur::Must, q));
         }
@@ -844,7 +852,7 @@ impl BookReader {
             } else {
                 let mut subqueries: Vec<(Occur, Box<dyn Query>)> = vec![];
                 //search only non-stemmed fields
-                for field in self.default_fields.iter() {
+                for field in self.def_fields_no_stem.iter() {
                     let q = RegexQuery::from_pattern(&i, *field)?; //don't want directly use tantivy_fst::Regex
                     subqueries.push((Occur::Should, Box::new(q)));
                 }
@@ -868,7 +876,7 @@ impl BookReader {
                 let mut subqueries: Vec<(Occur, Box<dyn Query>)> = vec![];
                 let (word, distance) = parse_fuzzy_pattern(&i);
                 //search only non-stemmed fields
-                for field in self.default_fields.iter() {
+                for field in self.def_fields_no_stem.iter() {
                     let term = Term::from_field_text(*field, &word);
                     let q = FuzzyTermQuery::new(term, distance, true);
                     subqueries.push((Occur::Should, Box::new(q)));

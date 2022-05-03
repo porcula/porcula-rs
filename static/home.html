@@ -23,10 +23,11 @@
                     <span data-field="author">автор</span>
                     <span data-field="translator">перевод</span>
                     <span data-field="sequence">серия</span>
-                    <span data-field="annotation">аннотация</span>
-                    <span data-field="body">текст</span>
+                    <span id="f_annotation" data-field="annotation">аннотация</span>
+                    <span id="f_body" data-field="body">текст</span>
                 </span>
-                <input type="checkbox" id="stem" name="stem"><label for="stem">во всех формах слова</label>
+                <input type="checkbox" id="stemming"><label for="stemming" title="поиск слов без учёта склонения">во всех формах слова</label>
+                <input type="checkbox" id="disjunction"><label for="disjunction" title="поиск любого из указанных слов (логическое ИЛИ)">любое слово</label>
                 <span>
                     <label for="page_size" class="hdiv">Строк на странице:</label>
                     <select id="page_size">
@@ -85,6 +86,7 @@
     <script src="jquery-1.12.4.min.js"></script>
     <script src="common.js"></script>
     <script>
+        var index_info = {};
         var size100pct = 5000000;
         var page = 0;
         var page_size = +(storage.getItem("page_size") || $("#page_size").val() || 20);
@@ -175,7 +177,8 @@
             $(".nav .expand").removeClass("expanded");
             var query = $("#query").val();
             if (query == "") return;
-            var stem = $("#stem:checked").length;
+            var stemming = $("#stemming:checked").length;
+            var disjunction = $("#disjunction:checked").length;
             $(".order").removeClass("ordered");
             $(".order[data-order='" + order + "']").addClass("ordered");
             var skip = page * page_size;
@@ -183,7 +186,7 @@
             storage.setItem("last_query", query);
             $.ajax({
                 url: "search",
-                data: { "query": query, "stem": stem, "order": order, "limit": page_size, "offset": skip },
+                data: { "query": query, "stemming": stemming, "disjunction": disjunction, "order": order, "limit": page_size, "offset": skip },
                 dataType: "json",
                 success: function (data) {
                     try {
@@ -465,13 +468,30 @@
         $("#query").focus();
 
         //load data
-        $("#book_count").load("book/count");
+        $.when(
+            $.getJSON("index/info", function (data) { index_info = data; })
+        ).then(function(){ 
+            $("#book_count").text(index_info.count);
+            if (index_info.settings.stemmer=="off") {
+                $("#stemming").hide();
+            }
+            if (!index_info.settings.options.annotation) {
+                $("#f_annotation").hide();
+            }
+            if (!index_info.settings.options.body) {
+                $("#f_body").hide();
+            }
+        });
         $.when(
             $.getJSON("genre/translation", function (data) { genre_translation = data; })
         ).then(function(){ 
             if ($("#query").val() != "") {
                 search(false);
             }
+        });
+
+        $("#book_count").click(function(){
+            alert(JSON.stringify(index_info));
         });
 
     </script>

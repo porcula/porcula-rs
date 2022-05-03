@@ -17,6 +17,7 @@ const CACHE_IMMUTABLE: u64 = 31_536_000;
 const CACHE_STATIC_ASSET: u64 = 86_400;
 const OPDS_PAGE_ENTRIES: usize = 20;
 
+
 pub fn run_server(args: &ServerArgs, app: Application) {
     let fts = app.open_book_reader().unwrap_or_else(|e| {
         error!("{}", e);
@@ -78,7 +79,7 @@ pub fn run_server(args: &ServerArgs, app: Application) {
         }
 
         router!(req,
-            (GET) (/book/count) => { handler_count(req, &fts) },
+            (GET) (/index/info) => { handler_index_info(req, &app, &fts) },
             (GET) (/search) => { handler_search(req, &fts) },
             (GET) (/facet) => { handler_facet(req, &fts) },
             (GET) (/genre/translation) => { Response::json(&genre_map.translation) },
@@ -143,17 +144,24 @@ fn split_request_url(req: &Request) -> (String, String) {
     (root_url(req), format!("/porcula{}", req.url()))
 }
 
-fn handler_count(_req: &Request, fts: &BookReader) -> Response {
+fn handler_index_info(_req: &Request, app: &Application, fts: &BookReader) -> Response {
     match &fts.count_all() {
-        Ok(count) => Response::text(count.to_string()).with_no_cache(),
-        Err(_) => Response::text("0".to_string()),
+        Ok(count) => { 
+            let info = IndexInfo {
+                count: *count,
+                settings: app.index_settings.clone(),
+            };
+            Response::json(&info).with_no_cache()
+        },
+        Err(_) => Response::empty_404(),
     }
 }
 
 fn handler_search(req: &Request, fts: &BookReader) -> Response {
     match req.get_param("query") {
         Some(query) => {
-            let stem = req.get_param("stem").unwrap_or_default() == "1";
+            let stemming = req.get_param("stemming").unwrap_or_default() == "1";
+            let disjunction = req.get_param("disjunction").unwrap_or_default() == "1";
             let limit: usize = req
                 .get_param("limit")
                 .unwrap_or_default()
@@ -167,7 +175,7 @@ fn handler_search(req: &Request, fts: &BookReader) -> Response {
             let order: String = req
                 .get_param("order")
                 .unwrap_or_else(|| String::from("default"));
-            match fts.search_as_json(&query, stem, &order, limit, offset) {
+            match fts.search_as_json(&query, stemming, disjunction, &order, limit, offset) {
                 Ok(json) => Response::from_data("application/json", json).with_no_cache(),
                 Err(e) => Response::text(e.to_string()).with_status_code(500),
             }
@@ -185,9 +193,10 @@ fn handler_facet(req: &Request, fts: &BookReader) -> Response {
         Some(ref s) if !s.is_empty() => Some(s.as_str()),
         _ => None,
     };
-    let stem = req.get_param("stem").unwrap_or_default() == "1";
+    let stemming = req.get_param("stemming").unwrap_or_default() == "1";
+    let disjunction = req.get_param("disjunction").unwrap_or_default() == "1";
     match req.get_param("path") {
-        Some(path) => match fts.get_facet(&path, opt_query, stem, hits) {
+        Some(path) => match fts.get_facet(&path, opt_query, stemming, disjunction, hits) {
             Ok(ref data) => Response::json(data).with_no_cache(),
             Err(e) => Response::text(e.to_string()).with_status_code(500),
         },
@@ -555,7 +564,7 @@ fn opds_facet(
         Some(x) => format!("/{}/{}", facet, x),
         None => format!("/{}", facet),
     };
-    match fts.get_facet(&path, None, false, None) {
+    match fts.get_facet(&path, None, false, false, None) {
         Ok(data) => {
             let mut arr: Vec<(String, u64, String)> = data
                 .into_iter()
@@ -626,7 +635,8 @@ fn opds_search_books(
     fts: &BookReader,
 ) -> Response {
     let (root_url, req_path) = split_request_url(req);
-    let stem = true;
+    let stemming = true; //TODO: url parameter
+    let disjunction = false;  //TODO: url parameter
     let limit = OPDS_PAGE_ENTRIES;
     let offset = page * OPDS_PAGE_ENTRIES;
     //split path to base and page
@@ -638,7 +648,7 @@ fn opds_search_books(
         path_parts[n] = format!("{}", page - 1);
         Some(path_parts.join("/"))
     };
-    match fts.search_as_meta(query, stem, order, limit, offset) {
+    match fts.search_as_meta(query, stemming, disjunction, order, limit, offset) {
         Ok(data) => {
             let next_url = if data.len() < limit {
                 None

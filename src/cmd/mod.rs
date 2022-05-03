@@ -166,11 +166,13 @@ pub struct QueryArgs {
     pub hits: usize,
     #[clap(short = 'x', long, help=tr!("Search in stemmed fields", "Поиск по всем формам слова"))]
     pub stem: bool,
+    #[clap(short = 'o', long="or", help=tr!("Logical OR by default", "Логическое ИЛИ по умолчанию"))]
+    pub disjunction: bool,
 }
 
 #[derive(Args, Debug)]
 pub struct FacetArgs {
-    #[clap(help=tr!("Facet path, i.e. '/author/K' or '/genre/sf'","Путь по категориям, например '/author/K' или '/genre/fiction/sf'"))]
+    #[clap(help=tr!("Facet path, i.e. '/author/K' or '/genre/fiction/sf'","Путь по категориям, например '/author/K' или '/genre/fiction/sf'"))]
     pub path: String,
     #[clap(short = 'H', long, default_value_t = DEFAULT_QUERY_HITS, help=tr!("Limit results to N top hits", "Ограничить число найденных книг"))]
     pub hits: usize,
@@ -184,12 +186,19 @@ pub struct ParseOpts {
     pub cover: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct IndexSettings {
     pub langs: Vec<String>,
     pub stemmer: String,
     pub books_dir: String,
     pub options: ParseOpts,
+}
+
+//for web-app
+#[derive(Serialize, Clone)]
+pub struct IndexInfo {
+    pub count: usize, //book count
+    pub settings: IndexSettings,
 }
 
 pub struct Application {

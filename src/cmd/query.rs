@@ -7,7 +7,7 @@ pub fn run_query(args: &QueryArgs, app: Application) {
         error!("{}", e);
         std::process::exit(4);
     });
-    match fts.search_as_json(&args.query, args.stem, "default", args.hits, 0) {
+    match fts.search_as_json(&args.query, args.stem, args.disjunction, "default", args.hits, 0) {
         Ok(res) => {
             println!("{}", res);
         }
