@@ -17,7 +17,6 @@ const CACHE_IMMUTABLE: u64 = 31_536_000;
 const CACHE_STATIC_ASSET: u64 = 86_400;
 const OPDS_PAGE_ENTRIES: usize = 20;
 
-
 pub fn run_server(args: &ServerArgs, app: Application) {
     let fts = app.open_book_reader().unwrap_or_else(|e| {
         error!("{}", e);
@@ -146,13 +145,13 @@ fn split_request_url(req: &Request) -> (String, String) {
 
 fn handler_index_info(_req: &Request, app: &Application, fts: &BookReader) -> Response {
     match &fts.count_all() {
-        Ok(count) => { 
+        Ok(count) => {
             let info = IndexInfo {
                 count: *count,
                 settings: app.index_settings.clone(),
             };
             Response::json(&info).with_no_cache()
-        },
+        }
         Err(_) => Response::empty_404(),
     }
 }
@@ -636,7 +635,7 @@ fn opds_search_books(
 ) -> Response {
     let (root_url, req_path) = split_request_url(req);
     let stemming = true; //TODO: url parameter
-    let disjunction = false;  //TODO: url parameter
+    let disjunction = false; //TODO: url parameter
     let limit = OPDS_PAGE_ENTRIES;
     let offset = page * OPDS_PAGE_ENTRIES;
     //split path to base and page

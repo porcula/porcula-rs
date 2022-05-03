@@ -1,4 +1,5 @@
-use log::{debug, error};
+#[allow(unused_imports)]
+use log::{debug,error};
 use rand::Rng;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
@@ -124,12 +125,11 @@ impl Fields {
             sequence: schema_builder.add_text_field("sequence", stored_text_opts.clone()),
             seqnum: schema_builder.add_i64_field("seqnum", STORED),
             annotation: schema_builder.add_text_field("annotation", stored_text_opts),
-            body: schema_builder.add_text_field("body", nonstored_simple_text_opts.clone()),
+            body: schema_builder.add_text_field("body", nonstored_simple_text_opts),
             xbody: schema_builder.add_text_field("xbody", nonstored_stemmed_text_opts.clone()),
             cover_image: schema_builder.add_text_field("cover_image", STORED),
             xtitle: schema_builder.add_text_field("xtitle", nonstored_stemmed_text_opts.clone()),
-            xannotation: schema_builder
-                .add_text_field("xannotation", nonstored_stemmed_text_opts.clone()),
+            xannotation: schema_builder.add_text_field("xannotation", nonstored_stemmed_text_opts),
         }
     }
 
@@ -508,15 +508,18 @@ impl BookReader {
     ///parser for search in default fields with|without stemming, with disjunction|disjunction by default
     fn get_parser(&self, stemming: bool, disjunction: bool) -> QueryParser {
         let mut parser = QueryParser::for_index(
-            &self.index, 
-            if stemming { self.def_fields_stem.clone() } else { self.def_fields_no_stem.clone() }
+            &self.index,
+            if stemming {
+                self.def_fields_stem.clone()
+            } else {
+                self.def_fields_no_stem.clone()
+            },
         );
         if !disjunction {
-          parser.set_conjunction_by_default();
+            parser.set_conjunction_by_default();
         }
         parser
     }
-
 
     /// Extract list of indexed files
     /// compact==Compact: Get complete zipfiles plus books of incomplete zipfiles
@@ -788,7 +791,12 @@ impl BookReader {
         Ok(facets)
     }
 
-    pub fn parse_query(&self, query: &str, stemming: bool, disjunction: bool) -> Result<Box<dyn Query>> {
+    pub fn parse_query(
+        &self,
+        query: &str,
+        stemming: bool,
+        disjunction: bool,
+    ) -> Result<Box<dyn Query>> {
         //emulate wildcard queries (word* or word?) with regexes
         let mut words = vec![];
         let mut regexes = vec![];
@@ -813,7 +821,7 @@ impl BookReader {
             } else {
                 //replace explicit field name to stemmed field name
                 let word = match stemming {
-                    true => match field_re.captures(&i) {
+                    true => match field_re.captures(i) {
                         Some(m) => {
                             let field_name = m.get(1).unwrap().as_str();
                             let query = m.get(2).unwrap().as_str();
