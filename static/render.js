@@ -2,6 +2,7 @@
 var find_word = "";
 var find_elem;
 var find_start = 0;
+
 var qs = (function (a) {
     if (a == "") return {};
     var b = {};
@@ -24,6 +25,9 @@ if (qs["find"]) {
         $("body").append('<div class="find_words">' + h + '</div>');
     }
 }
+if (storage.getItem("hide_words")) {
+    $('.find_words').hide();
+}  
 
 function do_find(w) {
     if (find_word != w || !find_elem) {
@@ -53,6 +57,7 @@ function do_find(w) {
 
 $(".find_words .hide").click(function () {
     $('.find_words').hide();
+    storage.setItem('hide_words','1');
 });
 $(".find_words .word").click(function () {
     do_find($(this).text());
@@ -206,6 +211,8 @@ document.onkeydown = function (e) {
     if (!e) e = window.event;
     if (e.key == '0') {
         $('.find_words').toggle();
+        var hide_words = $('.find_words:visible').length==0 ? '1' : '';
+        storage.setItem('hide_words',hide_words);
     }
     else if (e.key == 't') {
         if ($(".toc:visible").length) {
@@ -218,5 +225,8 @@ document.onkeydown = function (e) {
     else if (e.key >= '1' && e.key <= '9' && e.key <= words.length.toString()) {
         e.preventDefault();
         do_find(words[Number(e.key) - 1]);
+    }
+    else if (e.key=='Escape') {
+        $(".toc").hide();
     }
 }
