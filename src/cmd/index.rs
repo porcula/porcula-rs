@@ -80,7 +80,7 @@ struct CommitStats {
 }
 
 #[allow(clippy::cognitive_complexity)]
-pub fn run_index(args: &IndexArgs, app: Application) {
+pub fn run_index(args: &IndexArgs, app: Application) -> ProcessResult {
     let delta = args.mode == IndexMode::Delta;
     let mem = {
         use systemstat::{Platform, System};
@@ -103,8 +103,10 @@ pub fn run_index(args: &IndexArgs, app: Application) {
         }
     };
 
-    app.load_genre_map();
-    let genre_map = app.load_genre_map();
+    let genre_map = match app.load_genre_map() {
+        Ok(x) => x,
+        Err(e) => return ProcessResult::ConfigError(e),
+    };
     let book_formats = &app.book_formats;
 
     let mut lang_set = HashSet::<String>::new();
@@ -135,13 +137,10 @@ pub fn run_index(args: &IndexArgs, app: Application) {
     );
     //save settings with index
     debug!("store settings in {}", app.index_path.display());
-    app.index_settings
-        .save(&app.index_path)
-        .unwrap_or_else(|e| {
-            error!("{}", e);
-            std::process::exit(2);
-        });
-
+    match app.index_settings.save(&app.index_path) {
+        Ok(_) => (),
+        Err(e) => return ProcessResult::IndexError(e),
+    }
     //open index
     let mut book_writer = crate::fts::BookWriter::new(
         &app.index_path,
@@ -458,6 +457,7 @@ pub fn run_index(args: &IndexArgs, app: Application) {
         }
     })
     .unwrap();
+    ProcessResult::Ok
 }
 
 // extract number from string and left-pad it

@@ -1,5 +1,5 @@
 #[allow(unused_imports)]
-use log::{debug,error};
+use log::{debug, error};
 use rand::Rng;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
@@ -774,7 +774,7 @@ impl BookReader {
         let mut facet_collector = FacetCollector::for_field(self.fields.facet);
         facet_collector.add_facet(path);
         let query = match query {
-            Some(q) => self.parse_query(q, stemming, disjunction).unwrap(),
+            Some(q) => self.parse_query(q, stemming, disjunction)?,
             None => Box::new(AllQuery),
         };
         let facet_counts = searcher.search(&query, &facet_collector)?;

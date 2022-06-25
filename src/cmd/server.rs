@@ -1,7 +1,7 @@
 use atom_syndication::{
     Category, ContentBuilder, Entry, EntryBuilder, FeedBuilder, LinkBuilder, Person,
 };
-use log::{debug, error, info};
+use log::{debug, info};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use rouille::{Request, Response};
 use std::collections::{BTreeMap, HashMap};
@@ -17,11 +17,11 @@ const CACHE_IMMUTABLE: u64 = 31_536_000;
 const CACHE_STATIC_ASSET: u64 = 86_400;
 const OPDS_PAGE_ENTRIES: usize = 20;
 
-pub fn run_server(args: &ServerArgs, app: Application) {
-    let fts = app.open_book_reader().unwrap_or_else(|e| {
-        error!("{}", e);
-        std::process::exit(4);
-    });
+pub fn run_server(args: &ServerArgs, app: Application) -> ProcessResult {
+    let fts = match app.open_book_reader() {
+        Ok(x) => x,
+        Err(e) => return ProcessResult::IndexError(e),
+    };
     info!(
         "{}: {}",
         tr!["Index dir", "Индекс"],
@@ -48,7 +48,10 @@ pub fn run_server(args: &ServerArgs, app: Application) {
         tr!["Application", "Приложение"],
         &args.listen
     );
-    let genre_map = app.load_genre_map();
+    let genre_map = match app.load_genre_map() {
+        Ok(x) => x,
+        Err(e) => return ProcessResult::ConfigError(e),
+    };
 
     #[allow(clippy::cognitive_complexity, clippy::manual_strip)]
     rouille::start_server(&args.listen, move |req| {

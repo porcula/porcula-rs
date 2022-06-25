@@ -1,12 +1,10 @@
 use crate::cmd::*;
-use crate::tr;
-use log::error;
 
-pub fn run_query(args: &QueryArgs, app: Application) {
-    let fts = app.open_book_reader().unwrap_or_else(|e| {
-        error!("{}", e);
-        std::process::exit(4);
-    });
+pub fn run_query(args: &QueryArgs, app: Application) -> ProcessResult {
+    let fts = match app.open_book_reader() {
+        Ok(x) => x,
+        Err(e) => return ProcessResult::IndexError(e),
+    };
     match fts.search_as_json(
         &args.query,
         args.stem,
@@ -17,10 +15,8 @@ pub fn run_query(args: &QueryArgs, app: Application) {
     ) {
         Ok(res) => {
             println!("{}", res);
+            ProcessResult::Ok
         }
-        Err(e) => {
-            error!("{}: {}", tr!["Query error", "Ошибка запроса"], e);
-            std::process::exit(2);
-        }
+        Err(e) => ProcessResult::QueryError(e.to_string()),
     }
 }

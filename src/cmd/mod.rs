@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use std::process::{ExitCode, Termination};
 
 mod facet;
 mod index;
@@ -56,6 +57,39 @@ macro_rules! tr {
             $def
         }
     };
+}
+
+#[repr(u8)]
+pub enum ProcessResult {
+    Ok,
+    ConfigError(String),
+    IndexError(String),
+    QueryError(String),
+}
+
+impl Termination for ProcessResult {
+    fn report(self) -> ExitCode {
+        match self {
+            ProcessResult::Ok => ExitCode::from(0),
+            //exit code 2 == Clap::error:Error.exit() code
+            ProcessResult::ConfigError(e) => {
+                error!(
+                    "{}: {}",
+                    tr!["Configuration error", "Ошибка конфигурации"],
+                    e
+                );
+                ExitCode::from(3)
+            }
+            ProcessResult::IndexError(e) => {
+                error!("{}: {}", tr!["Index error", "Ошибка индекса"], e);
+                ExitCode::from(4)
+            }
+            ProcessResult::QueryError(e) => {
+                error!("{}: {}", tr!["Query error", "Ошибка запроса"], e);
+                ExitCode::from(5)
+            }
+        }
+    }
 }
 
 pub fn parse_args() -> AppArgs {
@@ -319,28 +353,24 @@ impl Application {
         }
     }
 
-    pub fn load_genre_map(&self) -> GenreMap {
+    pub fn load_genre_map(&self) -> Result<GenreMap, String> {
         let genre_map_path = Path::new(DEFAULT_ASSETS_DIR).join(GENRE_MAP_FILENAME);
-        let maybe_map = if genre_map_path.exists() {
+        if genre_map_path.exists() {
             //load file
-            let mut f = BufReader::new(std::fs::File::open(genre_map_path).unwrap());
-            GenreMap::load(&mut f)
+            let file = match std::fs::File::open(genre_map_path) {
+                Ok(f) => f,
+                Err(e) => return Err(e.to_string()),
+            };
+            let mut buf = BufReader::new(file);
+            GenreMap::load(&mut buf).map_err(|e| e.to_string())
         } else {
             //load static asset
             let data = assets::get(GENRE_MAP_FILENAME)
                 .expect("Genre map not found")
                 .content;
-            let mut f = BufReader::new(data);
-            GenreMap::load(&mut f)
-        };
-        maybe_map.unwrap_or_else(|_| {
-            error!(
-                "{}: {}",
-                tr!["Invalid file format", "Неправильный формат файла"],
-                GENRE_MAP_FILENAME
-            );
-            std::process::exit(1);
-        })
+            let mut buf = BufReader::new(data);
+            GenreMap::load(&mut buf).map_err(|e| e.to_string())
+        }
     }
 }
 
