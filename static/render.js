@@ -142,12 +142,19 @@ else {
     $(".toc").remove();
 }
 
-//title closest to viewport
-function closest_title_id() {
+//enumerate paragraphs
+var para_num = 0;
+$('p').each(function(){
+    if (this.id) return;
+    $(this).attr('id', '_p'+(++para_num));
+});
+
+//tag closest to viewport' center
+function closest_id(s) {
     var y = window.pageYOffset + window.innerHeight/2;
     var c = null;
     var id = null;
-    $(".title").each(function(){
+    $(s).each(function(){
       if (c && this.offsetTop>y) {
         id = c.id;
         return false;
@@ -159,7 +166,7 @@ function closest_title_id() {
 }
 
 function show_toc() {
-    var id = closest_title_id();
+    var id = closest_id('.title');
     $(".toc").show();
     $('.toc li').removeClass("current");
     //highlight closest title
@@ -192,14 +199,14 @@ $(".body").click(function () {
     $(".toc").hide();
 });
 
-//save read progress (coarsely)
+//save read progress
 var last_fragment = "";
 var last_top = 0;
 setInterval(function () {
     var top = window.pageYOffset;
     if (top != last_top) {
         last_top = top;
-        var id = closest_title_id();
+        var id = closest_id('p');
         if (id && id != last_fragment) {
             history.replaceState(null, "", "#" + id);
             last_fragment = id;
@@ -229,4 +236,14 @@ document.onkeydown = function (e) {
     else if (e.key=='Escape') {
         $(".toc").hide();
     }
+}
+
+
+function tmp_bench(n, s) {
+    const t0 = performance.now();
+    for (var i=0; i<n; i++) {
+        closest_id(s);
+    }
+    const t1 = performance.now();
+    console.log(`${(t1-t0)/n} ms/iter`);
 }
