@@ -150,6 +150,7 @@ td {
     border-bottom: 2px solid #333;
     background-color: #f6f8c3;
 }
+#limit_warning { color:#c60; }
 th {
     text-align: left;
     cursor: pointer;

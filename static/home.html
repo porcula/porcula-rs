@@ -71,6 +71,7 @@
                 Страница: <span id="page"></span>
                 Книг: <span id="total"></span>
                 <button class="expand">детально</button>
+                <span id="limit_warning">пропущена часть результатов, уточните запрос</span>
             </div>
             <table id="result">
                 <thead>
@@ -181,6 +182,7 @@
             $("#page_size").val(page_size);
             $("#res_wrapper").hide();
             $("#query_hint").hide();
+            $('#limit_warning').hide();
             if (!append) $("#result tbody").empty();
             $("#error").empty();
             $("#page").text("");
@@ -223,6 +225,7 @@
             var total = data.total || 0;
             var books_left = total - (page + 1) * page_size;
             last_page = Math.trunc((total+page_size-1) / page_size)-1;
+            if (total>1000 && order!='default' && order!='random') $('#limit_warning').show();
             try {
                 $(".prev").prop('disabled', page <= 0);
                 $(".next").prop('disabled', books_left <= 0);
