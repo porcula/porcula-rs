@@ -152,14 +152,14 @@ $('p').each(function(){
 //tag closest to viewport' center
 function closest_id(s) {
     var y = window.pageYOffset + window.innerHeight/2;
-    var c = null;
+    var prev = null;
     var id = null;
     $(s).each(function(){
-      if (c && this.offsetTop>y) {
-        id = c.id;
+      if (prev && this.offsetTop>y) {
+        id = prev.id;
         return false;
       }
-      c = this;
+      prev = this;
       return true;
     });
     return id;
@@ -199,51 +199,185 @@ $(".body").click(function () {
     $(".toc").hide();
 });
 
-//save read progress
-var last_fragment = "";
+//read progress
+var read_position = "";
 var last_top = 0;
 setInterval(function () {
     var top = window.pageYOffset;
     if (top != last_top) {
         last_top = top;
-        var id = closest_id('p');
-        if (id && id != last_fragment) {
-            history.replaceState(null, "", "#" + id);
-            last_fragment = id;
-        }
+        save_state();            
     }
 }, 10000);
 
-document.onkeydown = function (e) {
+//stored reading state: { book-id, last-read-date, position, bookmarks, current-bookmark }
+var max_book_stored = 10;
+var book_idx = null;
+var min_idx = 0;
+var min_d = '9999';
+var book_id = window.location.pathname.replace('/porcula/book/','').replace('/render','');
+var state = { id: book_id, p: "", m:[], c:0 };
+
+for (var i=0; i<max_book_stored; i++) { //LRU cache
+  var s =  storage.getItem("book"+i);
+  if (!s || s=='') continue;
+  var b = JSON.parse(s);
+  if (b.id==book_id) {
+      book_idx = i;
+      state = b;
+  }
+  if (b.d<min_d) { min_d=b.d; min_idx=i; }
+}
+if (book_idx==null) {
+    if (book_store.length>=max_book_stored) {
+        book_idx = min_idx;
+    }
+    else {
+        book_idx = book_store.length;
+    }
+}
+if (state.p) {
+    var c = $('#'+state.p).get();
+    if (c.length>0) {
+        c[0].scrollIntoView({ "block": "center" });
+    }
+}
+for (i in state.m) {
+  $('#'+state.m[i]).addClass('bookmark bm'+i);
+}
+
+function save_state() {
+    var id = closest_id('p');
+    if (!id) return;
+    if (id==read_position) return;
+    read_position = id;
+    history.replaceState(null, "", "#" + id);
+    state.d = (new Date()).toISOString();
+    state.p = closest_id('p');
+    storage.setItem('book'+book_idx, JSON.stringify(state));
+}
+
+function toggle_bookmark() {
+    var id;
+    var s = document.getSelection();
+    if (s.type == 'Range') { //selected text
+        var r = s.getRangeAt(0);
+        var n = r.startContainer;
+        while (n) {
+            if (n.id) {
+                id = n.id;
+                break;
+            }
+            n = n.parentNode;
+        }
+    }
+    if (!id) id = closest_id('p'); //paragraph in center of view
+    if (!id) return;
+    var i = state.m.indexOf(id);
+    if (i<0) { //add
+        for (var idx in state.m) { 
+            if (state.m[idx]==undefined || state.m[idx]==null) {
+                i = idx; //reuse undefined entry
+                break;
+            }
+        }
+        if (i<0) {
+            i = state.m.push(id) - 1; //add new entry
+        } else {
+            state.m[i] = id;
+        }
+        state.c = i;
+        $('#'+id).addClass('bookmark bm'+i);
+    }
+    else { //remove
+        state.m[i] = undefined;
+        state.c = (i>0) ? i-1 : 0;
+        $('#'+id).removeClass('bookmark bm'+i);
+    }
+    save_state();  
+}
+
+function prev_bookmark() {
+    if (state.m.length==0) return;
+    if (state.c<1) { 
+        state.c = 0;
+    }
+    else  if (state.c>(state.m.length-1)) {
+        state.c = state.m.length-1;
+    } else {   
+        state.c--;
+    }
+    var e = $('#'+state.m[state.c]).get(0);
+    if (!e) return;
+    e.scrollIntoView({ "block": "center" });
+    save_state();  
+}
+
+function next_bookmark() {
+    if (state.m.length==0) return;
+    if (state.c<0) {
+        state.c=0;
+    } else if (state.c>=(state.m.length-1)) {
+        state.c = state.m.length-1;
+    } else {
+        state.c++;
+    }
+    var e = $('#'+state.m[state.c]).get(0);
+    if (!e) return;
+    e.scrollIntoView({ "block": "center" });
+    save_state();  
+}
+
+function goto_bookmark(n) {
+    if (n<0 || n>(state.m.length-1)) return;
+    var e = $('#'+state.m[n]).get(0);
+    if (!e) return;
+    e.scrollIntoView({ "block": "center" });
+    state.c = n;
+    save_state();  
+}
+
+window.addEventListener('keydown', function (e) {
     if (!e) e = window.event;
-    if (e.key == '0') {
-        $('.find_words').toggle();
-        var hide_words = $('.find_words:visible').length==0 ? '1' : '';
-        storage.setItem('hide_words',hide_words);
+    var code = e.code || e.keyCode;
+    switch (code) {
+        case 'KeyT': case 84:
+            if ($(".toc:visible").length) {
+                $(".toc").hide()
+            }
+            else {
+                show_toc();
+            }
+            break;
+        case 'Digit0': case 48:
+            $('.find_words').toggle();
+            var hide_words = $('.find_words:visible').length==0 ? '1' : '';
+            storage.setItem('hide_words',hide_words);
+            break;
+        case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4': case 'Digit5': case 'Digit6': case 'Digit7': case 'Digit8': case 'Digit9':
+        case 49: case 50: case 51: case 52: case 53: case 54: case 55: case 56: case 57: 
+            e.preventDefault();
+            var n = Number(e.key);
+            if (e.altKey) {
+                goto_bookmark(n-1);
+            } else {
+                if (n<=words.length) do_find(words[n-1]);
+            }
+            break;
+        case 'Escape': case 27:
+            $(".toc").hide(); 
+            break;
+        case 'KeyB': case 66:
+            if (!e.ctrlKey && !e.altKey) toggle_bookmark();
+            break;
+        case 'KeyK': case 75:
+            if (e.ctrlKey) toggle_bookmark();
+            break;
+        case 'KeyP': case 80:
+            if (!e.ctrlKey && !e.altKey) prev_bookmark();
+            break;
+        case 'KeyN': case 78:
+            if (!e.ctrlKey && !e.altKey) next_bookmark();
+            break;
     }
-    else if (e.key == 't') {
-        if ($(".toc:visible").length) {
-            $(".toc").hide()
-        }
-        else {
-            show_toc();
-        }
-    }
-    else if (e.key >= '1' && e.key <= '9' && e.key <= words.length.toString()) {
-        e.preventDefault();
-        do_find(words[Number(e.key) - 1]);
-    }
-    else if (e.key=='Escape') {
-        $(".toc").hide();
-    }
-}
-
-
-function tmp_bench(n, s) {
-    const t0 = performance.now();
-    for (var i=0; i<n; i++) {
-        closest_id(s);
-    }
-    const t1 = performance.now();
-    console.log(`${(t1-t0)/n} ms/iter`);
-}
+});

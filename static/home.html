@@ -39,6 +39,7 @@
             </div>
         </div>
         <div id="query_hint" style="display:none">
+            Синтаксис запросов:
             <ul class="itemizedlist" type="disc">
                 <li class="listitem"><p>оператор И: </p><pre class="programlisting">hello AND world</pre></li>
                 <li class="listitem"><p>оператор ИЛИ: </p><pre class="programlisting">hello OR world</pre></li>
@@ -51,12 +52,16 @@
                 <li class="listitem"><p>поиск по регулярному выражению (медленный!): </p><pre class="programlisting">title:hell.*</pre></li>
                 <li class="listitem"><p>нечёткий поиск (одна опечатка, медленно!): </p><pre class="programlisting">title:helo~ или title:hel~~</pre></li>
             </ul>
-            Быстрые клавиши при чтении:
-            <ul class="shortcut_list">
-                <li><span class="shortcut">T</span>Скрыть/показать оглавление</li>
-                <li><span class="shortcut">0</span>Скрыть/показать список слов</li>
-                <li><span class="shortcut">1-9</span>Поиск слова по тексту</li>
-            </ul>
+            Клавиатурные сокращения при чтении:
+            <table class="shortcut_table">
+                <tr><td><span class="shortcut">T</span></td><td>Показать/скрыть оглавление</td></tr>
+                <tr><td><span class="shortcut">0</span></td><td>Показать/скрыть список искомых слов</td></tr>
+                <tr><td><span class="shortcut">1</span>..<span class="shortcut">9</span></td><td>Поиск слова по тексту</td></tr>
+                <tr><td><span class="shortcut">B</span></td><td>Добавить/удалить закладку</td></tr>
+                <tr><td><span class="shortcut">P</span></td><td>Предыдущая закладка</td></tr>
+                <tr><td><span class="shortcut">N</span></td><td>Следующая закладка</td></tr>
+                <tr><td><span class="shortcut">Alt+1</span>..<span class="shortcut">Alt+9</span><td>Переход к закладке</td></tr>
+            </table>
         </div>
 
         <div id="res_wrapper" style="display:none">

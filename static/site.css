@@ -83,6 +83,12 @@ button.expanded {
 #query_hint p {
     display: inline;
 }
+.shortcut_table { border-collapse: collapse; margin-left:3em; }
+.shortcut_table td { margin-right: 2em; }
+.shortcut { 
+    display: inline-block; min-width:2em; border: 1px solid #888; border-radius: 3px; color: #008; 
+    text-align: center;
+}
 
 .programlisting {
     font: 9pt Consolas,fixed;
@@ -608,10 +614,5 @@ table.list-result {
 }
 .gauge.bk100 {
     background-color: #7f7f7f;
-}
-
-.shortcut { 
-    display: inline-block; min-width:2em; border: 1px solid #888; border-radius: 3px; color: #008; 
-    margin-right: 2em; text-align: center;
 }
 
