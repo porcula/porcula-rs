@@ -299,15 +299,21 @@ function toggle_bookmark() {
 
 function prev_bookmark() {
     if (state.m.length==0) return;
-    if (state.c<1) { 
-        state.c = 0;
+    var i = state.c;
+    if (i<1) { 
+        i = 0;
     }
-    else  if (state.c>(state.m.length-1)) {
-        state.c = state.m.length-1;
+    else if (i>(state.m.length-1)) {
+        i = state.m.length-1;
     } else {   
-        state.c--;
+        i--;
     }
-    var e = $('#'+state.m[state.c]).get(0);
+    while (i>0 && !state.m[i]) {
+        i--;
+    }
+    if (!state.m[i]) return;
+    state.c = i;
+    var e = $('#'+state.m[i]).get(0);
     if (!e) return;
     e.scrollIntoView({ "block": "center" });
     save_state();  
@@ -315,14 +321,20 @@ function prev_bookmark() {
 
 function next_bookmark() {
     if (state.m.length==0) return;
-    if (state.c<0) {
-        state.c=0;
-    } else if (state.c>=(state.m.length-1)) {
-        state.c = state.m.length-1;
+    var i = state.c;
+    if (i<0) {
+        i=0;
+    } else if (i>=(state.m.length-1)) {
+        i = state.m.length-1;
     } else {
-        state.c++;
+        i++;
     }
-    var e = $('#'+state.m[state.c]).get(0);
+    while (i<state.m.length && !state.m[i]) {
+        i++;
+    }
+    if (!state.m[i]) return;
+    state.c = i;
+    var e = $('#'+state.m[i]).get(0);
     if (!e) return;
     e.scrollIntoView({ "block": "center" });
     save_state();  
