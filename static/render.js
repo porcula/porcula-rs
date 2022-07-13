@@ -212,6 +212,7 @@ setInterval(function () {
 
 //stored reading state: { book-id, last-read-date, position, bookmarks, current-bookmark }
 var max_book_stored = 10;
+var book_stored = 0;
 var book_idx = null;
 var min_idx = 0;
 var min_d = '9999';
@@ -221,6 +222,7 @@ var state = { id: book_id, p: "", m:[], c:0 };
 for (var i=0; i<max_book_stored; i++) { //LRU cache
   var s =  storage.getItem("book"+i);
   if (!s || s=='') continue;
+  book_stored = i;
   var b = JSON.parse(s);
   if (b.id==book_id) {
       book_idx = i;
@@ -229,11 +231,11 @@ for (var i=0; i<max_book_stored; i++) { //LRU cache
   if (b.d<min_d) { min_d=b.d; min_idx=i; }
 }
 if (book_idx==null) {
-    if (book_store.length>=max_book_stored) {
+    if (book_stored>=max_book_stored-1) {
         book_idx = min_idx;
     }
     else {
-        book_idx = book_store.length;
+        book_idx = book_stored+1;
     }
 }
 if (state.p) {
