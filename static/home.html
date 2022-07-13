@@ -10,7 +10,7 @@
     <div class="container body-content">
         <div id="filter">
             Поиск:
-            <button id="show_query_hint" class="mh">?</button>
+            <button id="show_help" class="mh">?</button>
             <input id="query" name="query" type="text" maxlength="1000" value="" />
             <button id="search">Искать</button>
             <a class="list" href="genres.html">Жанры</a>
@@ -38,11 +38,11 @@
                 </span>
             </div>
         </div>
-        <div id="query_hint" style="display:none">
+        <div id="help" style="display:none">
             Синтаксис запросов:
             <ul class="itemizedlist" type="disc">
-                <li class="listitem"><p>оператор И: </p><pre class="programlisting">hello AND world</pre></li>
-                <li class="listitem"><p>оператор ИЛИ: </p><pre class="programlisting">hello OR world</pre></li>
+                <li class="listitem"><p>оператор И (=нет галки "любое слово"): </p><pre class="programlisting">hello AND world</pre></li>
+                <li class="listitem"><p>оператор ИЛИ (=есть галка "любое слово"): </p><pre class="programlisting">hello OR world</pre></li>
                 <li class="listitem"><p>оператор НЕ:</p><pre class="programlisting">hello -title:world</pre></li>
                 <li class="listitem"><p>поиск по полям: </p><pre class="programlisting">title:hello AND body:world</pre></li>
                 <li class="listitem"><p>поиск фразы: </p><pre class="programlisting">"hello world" или title:"hello world"</pre></li>
@@ -181,7 +181,7 @@
         function search(append) {
             $("#page_size").val(page_size);
             $("#res_wrapper").hide();
-            $("#query_hint").hide();
+            $("#help").hide();
             $('#limit_warning').hide();
             if (!append) $("#result tbody").empty();
             $("#error").empty();
@@ -384,8 +384,8 @@
         });
 
 
-        $("#show_query_hint").click(function () {
-            $("#query_hint").toggle();
+        $("#show_help").click(function () {
+            $("#help").toggle();
         });
 
         $("#query").keypress(function (event) {

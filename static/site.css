@@ -68,19 +68,23 @@ button.expanded {
     width: 50%;
     min-width:10em;
 }
-#query_hint {
+#help {
+    position: absolute;
+    top: 5ex;
+    width: 60em;
     background-color: #f6f8c3;
     border: 2px solid #d8d9ac;
     font: 9pt Arial;
     line-height: 14pt;
+    padding: 1em;
 }
-#query_hint li {
+#help li {
     border-bottom: 1px solid #d8d9ac;
     margin: 0;
     padding: 0;
     column-width: 20em;
 }
-#query_hint p {
+#help p {
     display: inline;
 }
 .shortcut_table { border-collapse: collapse; margin-left:3em; }
