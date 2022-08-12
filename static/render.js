@@ -155,11 +155,9 @@ function closest_id(s) {
     var prev = null;
     var id = null;
     $(s).each(function(){
-      if (prev && this.offsetTop>y) {
-        id = prev.id;
-        return false;
-      }
+      if (prev && this.offsetTop>y) return false;
       prev = this;
+      id = prev.id;
       return true;
     });
     return id;
