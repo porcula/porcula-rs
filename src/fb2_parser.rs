@@ -697,9 +697,9 @@ impl BookFormat for Fb2BookFormat {
                         if let Some(href) = get_attr_raw(b"href", &mut e.attributes()) {
                             if let Some((ct, data)) = img.get(&href.value) {
                                 let mut src = b"data:".to_vec();
-                                src.extend_from_slice(&*ct); //content-type
+                                src.extend_from_slice(ct); //content-type
                                 src.extend_from_slice(b" ;base64, ");
-                                src.extend_from_slice(&*data); //image data
+                                src.extend_from_slice(data); //image data
                                 let attrs = vec![Attribute {
                                     key: b"src",
                                     value: Cow::Owned(src),

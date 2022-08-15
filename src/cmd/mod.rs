@@ -51,7 +51,7 @@ lazy_static! {
 #[macro_export]
 macro_rules! tr {
     ( $def:expr, $loc:expr ) => {
-        if *crate::cmd::MESSAGE_LANG == "ru" {
+        if *$crate::cmd::MESSAGE_LANG == "ru" {
             $loc
         } else {
             $def
@@ -130,14 +130,14 @@ pub enum Command {
     Facet(FacetArgs),
 }
 
-#[derive(PartialEq, Debug, strum::Display, strum::EnumString)]
+#[derive(Eq, PartialEq, Debug, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "lowercase")]
 pub enum IndexMode {
     Full,
     Delta,
 }
 
-#[derive(PartialEq, Debug, strum::Display, strum::EnumString)]
+#[derive(Eq, PartialEq, Debug, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "lowercase")]
 pub enum OnOff {
     On,
