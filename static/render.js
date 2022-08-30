@@ -208,7 +208,7 @@ setInterval(function () {
     }
 }, 10000);
 
-//stored reading state: { book-id, last-read-date, position, bookmarks, current-bookmark }
+//stored reading state: { book-id, last-read-date, position, bookmarks, current-bookmark, auto-bookmark }
 var max_book_stored = 10;
 var book_stored = 0;
 var book_idx = null;
@@ -251,10 +251,25 @@ function save_state() {
     if (!id) return;
     if (id==read_position) return;
     read_position = id;
-    history.replaceState(null, "", "#" + id);
+    window.history.replaceState(null, "", "#" + id);
     state.d = (new Date()).toISOString();
     state.p = closest_id('p');
     storage.setItem('book'+book_idx, JSON.stringify(state));
+}
+
+function set_auto_bookmark() {
+    var id = closest_id('p');
+    if (!id) return;
+    state.ab = id;
+    var hash = '#'+id;
+    window.history.pushState(null, '', hash);
+}
+
+function goto_auto_bookmark() {
+    if (!state.ab) return;
+    var e = $('#'+state.ab).get(0);
+    if (!e) return;
+    e.scrollIntoView({ "block": "center" });
 }
 
 function toggle_bookmark() {
@@ -290,7 +305,10 @@ function toggle_bookmark() {
         $('#'+id).addClass('bookmark bm'+i);
     }
     else { //remove
-        state.m[i] = undefined;
+        state.m[i] = null;
+        var j = state.m.length;
+        while (j>0 && state.m[j-1]==null) j--;
+        state.m.length = j; //trim array
         state.c = (i>0) ? i-1 : 0;
         $('#'+id).removeClass('bookmark bm'+i);
     }
@@ -315,6 +333,7 @@ function prev_bookmark() {
     state.c = i;
     var e = $('#'+state.m[i]).get(0);
     if (!e) return;
+    set_auto_bookmark();
     e.scrollIntoView({ "block": "center" });
     save_state();  
 }
@@ -336,6 +355,7 @@ function next_bookmark() {
     state.c = i;
     var e = $('#'+state.m[i]).get(0);
     if (!e) return;
+    set_auto_bookmark();
     e.scrollIntoView({ "block": "center" });
     save_state();  
 }
@@ -344,6 +364,7 @@ function goto_bookmark(n) {
     if (n<0 || n>(state.m.length-1)) return;
     var e = $('#'+state.m[n]).get(0);
     if (!e) return;
+    set_auto_bookmark();
     e.scrollIntoView({ "block": "center" });
     state.c = n;
     save_state();  
@@ -362,9 +383,13 @@ window.addEventListener('keydown', function (e) {
             }
             break;
         case 'Digit0': case 48:
-            $('.find_words').toggle();
-            var hide_words = $('.find_words:visible').length==0 ? '1' : '';
-            storage.setItem('hide_words',hide_words);
+            if (e.altKey) {
+                goto_auto_bookmark();
+            } else {
+                $('.find_words').toggle();
+                var hide_words = $('.find_words:visible').length==0 ? '1' : '';
+                storage.setItem('hide_words',hide_words);
+            }
             break;
         case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4': case 'Digit5': case 'Digit6': case 'Digit7': case 'Digit8': case 'Digit9':
         case 49: case 50: case 51: case 52: case 53: case 54: case 55: case 56: case 57: 
@@ -390,6 +415,9 @@ window.addEventListener('keydown', function (e) {
             break;
         case 'KeyN': case 78:
             if (!e.ctrlKey && !e.altKey) next_bookmark();
+            break;
+        case 'Home': case 'End': case 36: case 35:
+            set_auto_bookmark();
             break;
     }
 });
