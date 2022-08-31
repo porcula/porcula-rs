@@ -76,15 +76,76 @@ $(".find_words .word").click(function () {
     }
 });
 
-//backlinks
+//enumerate paragraphs
+var para_num = 0;
+$('p').each(function(){
+    if (this.id) return;
+    $(this).attr('id', '_p'+(++para_num));
+});
+
+//plain numeric reference: [N] -> <p>N</p>
+//could be independent numeration for each chapter
+var plain_refs = [];
+$('sup').each(function(){ //<sup>[N]</sup>
+    if (this.childElementCount>0) return;
+    if ($(this).closest('a').length) return;
+    var m = this.textContent.match(/^\[([0-9]+)\]$/);
+    if (m && m.length==2) plain_refs.push([m[1],this]);
+});
+if (plain_refs.length==0 && $('a').length==0) { //no markup [N]
+    var sup_num = 0;
+    $('#content').find("*").addBack().contents().filter(function(){
+        return this.nodeType==3 && this.textContent.match(/\[([0-9]+)\]/);
+    })
+    .each(function(){
+        var html = esc(this.textContent).replace(/\[([0-9]+)\]/g, function(m,n){
+            var id = "_sup"+(++sup_num);
+            plain_refs.push([n,'#'+id]);
+            return '<sup id="'+id+'">'+m+'</sup>';
+        });
+        $(this).replaceWith(html);
+    });
+}
+if (plain_refs.length) {
+    var targets = {}; //numeric paragraphs, last one is probably notes
+    $('div, p, div>strong:only-child, p>strong:only-child').each(function(){ 
+        if (this.childElementCount>0) return;
+        var m = this.textContent.match(/^\s*([0-9]+)/);
+        if (m && m.length==2) {
+            var n = m[1];
+            var node = (this.tagName=='P' || this.tagName=='DIV') ? this : this.parentNode;
+            if (targets[n]) {
+                targets[n].push(node);
+            } else {
+                targets[n] = [node];
+            }
+        }
+    });
+    for (var i=plain_refs.length-1; i>=0; i--) {
+        var n = plain_refs[i][0];
+        var t = targets[n];
+        if (t != undefined && t.length>0) {
+            var f = t.pop(); 
+            var s = plain_refs[i][1];
+            $(s).wrapInner('<a href="#'+f.id+'"/>');
+        }
+    }
+}
+plain_refs = undefined;
+
+//notes and backlinks
 $("a[href^='#']").each(function () {
     var a = $(this);
     var href = a.attr("href");
     var note = $(href);
-    if (note.length > 0) {
+    if (note.length) {
         var title = a.attr("title");
         if (!title) {
             title = note.contents().slice(0, 10).text();
+            //whitespace or numeric content -> add next paragraph
+            if (title.match(/^\s*[0-9]*\s*$/)) {
+                title = note.nextAll().filter(function(){return this.textContent.match(/\S/)}).first().text();
+            }
             title = title.replace(/\n+/g, "\n").replace(/^\s+/, "").replace(/^[0-9]+\n/, "");
             if (title.length > 600) {
                 title = title.substring(0, 600) + "...";
@@ -105,6 +166,7 @@ $("a[href^='#']").each(function () {
         }
     }
 });
+
 
 //table of contents
 var min_lvl = 100;
@@ -141,13 +203,6 @@ if (titles.length > 1) { //do not show empty TOC or one-line TOC
 else {
     $(".toc").remove();
 }
-
-//enumerate paragraphs
-var para_num = 0;
-$('p').each(function(){
-    if (this.id) return;
-    $(this).attr('id', '_p'+(++para_num));
-});
 
 //tag closest to viewport' center
 function closest_id(s) {
