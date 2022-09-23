@@ -9,7 +9,7 @@ pub fn run_query(args: &QueryArgs, app: Application) -> ProcessResult {
         &args.query,
         args.stem,
         args.disjunction,
-        "default",
+        crate::fts::OrderBy::Default,
         args.hits,
         0,
     ) {

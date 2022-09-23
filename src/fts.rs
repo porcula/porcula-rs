@@ -9,8 +9,8 @@ use tantivy::query::{
     AllQuery, BooleanQuery, FuzzyTermQuery, Occur, Query, QueryParser, QueryParserError,
     RegexQuery, TermQuery,
 };
-use tantivy::schema::*;
-use tantivy::tokenizer::*;
+use tantivy::schema::{Schema, SchemaBuilder, Field, TextFieldIndexing, IndexRecordOption, TextOptions, Facet, Document, Value, Term, INDEXED, STORED, STRING, FAST};
+use tantivy::tokenizer;
 use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, Searcher, TantivyError};
 
 use crate::letter_replacer::LetterReplacer;
@@ -44,6 +44,10 @@ struct Fields {
     cover_image: Field, //jpeg in base64
     xtitle: Field,      //stemmed tokenizer
     xannotation: Field, //stemmed tokenizer
+    sort_title: Field,
+    sort_author: Field,
+    sort_translator: Field,
+    sort_sequence: Field,
 }
 
 #[derive(Debug)]
@@ -62,6 +66,15 @@ pub struct BookMeta {
     pub seqnum: Option<i64>,
     pub annotation: Option<String>,
 }
+
+#[derive(Default, Eq, PartialEq, Debug, strum::Display, strum::EnumString)]
+#[strum(serialize_all = "lowercase")]
+pub enum OrderBy {
+    #[default] Default, //by score
+    Random,
+    Title, Author, Translator, Sequence,
+}    
+
 
 pub enum IndexListDetails {
     Full,
@@ -130,6 +143,10 @@ impl Fields {
             cover_image: schema_builder.add_text_field("cover_image", STORED),
             xtitle: schema_builder.add_text_field("xtitle", nonstored_stemmed_text_opts.clone()),
             xannotation: schema_builder.add_text_field("xannotation", nonstored_stemmed_text_opts),
+            sort_title: schema_builder.add_u64_field("sort_title", FAST|STORED),
+            sort_author: schema_builder.add_u64_field("sort_author", FAST),
+            sort_translator: schema_builder.add_u64_field("sort_translator", FAST),
+            sort_sequence: schema_builder.add_u64_field("sort_sequence", FAST),
         }
     }
 
@@ -159,6 +176,10 @@ impl Fields {
             cover_image: load_field("cover_image")?,
             xtitle: load_field("xtitle")?,
             xannotation: load_field("xannotation")?,
+            sort_title: load_field("sort_title")?,
+            sort_author: load_field("sort_author")?,
+            sort_translator: load_field("sort_translator")?,
+            sort_sequence: load_field("sort_sequence")?,
         })
     }
 }
@@ -168,40 +189,40 @@ fn file_facet(zipfile: &str, filename: &str) -> Facet {
     Facet::from_text(&path).unwrap()
 }
 
-fn get_simple_tokenizer() -> TextAnalyzer {
-    TextAnalyzer::from(SimpleTokenizer)
-        .filter(RemoveLongFilter::limit(40))
-        .filter(LowerCaser)
+fn get_simple_tokenizer() -> tokenizer::TextAnalyzer {
+    tokenizer::TextAnalyzer::from(tokenizer::SimpleTokenizer)
+        .filter(tokenizer::RemoveLongFilter::limit(40))
+        .filter(tokenizer::LowerCaser)
         .filter(LetterReplacer)
 }
 
-fn get_stemmed_tokenizer(stemmer: &str) -> TextAnalyzer {
+fn get_stemmed_tokenizer(stemmer: &str) -> tokenizer::TextAnalyzer {
     let language = match stemmer {
-        "ar" => Language::Arabic,
-        "da" => Language::Danish,
-        "nl" => Language::Dutch,
-        "en" => Language::English,
-        "fi" => Language::Finnish,
-        "fr" => Language::French,
-        "de" => Language::German,
-        "el" => Language::Greek,
-        "hu" => Language::Hungarian,
-        "it" => Language::Italian,
-        "no" => Language::Norwegian,
-        "pt" => Language::Portuguese,
-        "ro" => Language::Romanian,
-        "ru" => Language::Russian,
-        "es" => Language::Spanish,
-        "sv" => Language::Swedish,
-        "ta" => Language::Tamil,
-        "tr" => Language::Turkish,
-        _ => return TokenizerManager::default().get("default").unwrap(),
+        "ar" => tokenizer::Language::Arabic,
+        "da" => tokenizer::Language::Danish,
+        "nl" => tokenizer::Language::Dutch,
+        "en" => tokenizer::Language::English,
+        "fi" => tokenizer::Language::Finnish,
+        "fr" => tokenizer::Language::French,
+        "de" => tokenizer::Language::German,
+        "el" => tokenizer::Language::Greek,
+        "hu" => tokenizer::Language::Hungarian,
+        "it" => tokenizer::Language::Italian,
+        "no" => tokenizer::Language::Norwegian,
+        "pt" => tokenizer::Language::Portuguese,
+        "ro" => tokenizer::Language::Romanian,
+        "ru" => tokenizer::Language::Russian,
+        "es" => tokenizer::Language::Spanish,
+        "sv" => tokenizer::Language::Swedish,
+        "ta" => tokenizer::Language::Tamil,
+        "tr" => tokenizer::Language::Turkish,
+        _ => return tokenizer::TokenizerManager::default().get("default").unwrap(),
     };
-    TextAnalyzer::from(SimpleTokenizer)
-        .filter(RemoveLongFilter::limit(40))
-        .filter(LowerCaser)
+    tokenizer::TextAnalyzer::from(tokenizer::SimpleTokenizer)
+        .filter(tokenizer::RemoveLongFilter::limit(40))
+        .filter(tokenizer::LowerCaser)
         .filter(LetterReplacer)
-        .filter(Stemmer::new(language))
+        .filter(tokenizer::Stemmer::new(language))
 }
 
 impl BookWriter {
@@ -281,35 +302,38 @@ impl BookWriter {
         if let Some(id) = &book.id {
             doc.add_text(self.fields.id, &id);
         }
-        for i in &book.lang {
-            if !i.is_empty() {
-                doc.add_text(self.fields.lang, &i)
+        for v in &book.lang {
+            if !v.is_empty() {
+                doc.add_text(self.fields.lang, &v)
             }
         }
-        for i in &book.title {
-            if !i.is_empty() {
-                doc.add_text(self.fields.title, &i);
+        for (i, v) in book.title.iter().enumerate() {
+            if !v.is_empty() {
+                doc.add_text(self.fields.title, &v);
                 if self.use_stemmer {
-                    doc.add_text(self.fields.xtitle, &i);
+                    doc.add_text(self.fields.xtitle, &v);
+                }
+                if i==0 {
+                    doc.add_u64(self.fields.sort_title, crate::sort::hash_desc(v));
                 }
             }
         }
-        for i in &book.date {
-            if !i.is_empty() {
-                doc.add_text(self.fields.date, &i)
+        for v in &book.date {
+            if !v.is_empty() {
+                doc.add_text(self.fields.date, &v)
             }
         }
         let mut genre_facet = vec![];
         let mut keyword = book.keyword.clone();
-        for i in &book.genre {
-            if !i.is_empty() {
-                genre_facet.push(format!("/genre/{}", genre_map.path_for(i)));
+        for v in &book.genre {
+            if !v.is_empty() {
+                genre_facet.push(format!("/genre/{}", genre_map.path_for(v)));
                 //if genre looks like word -> add it to keywords
-                if !i.contains('_') {
-                    keyword.push(i.to_lowercase());
+                if !v.contains('_') {
+                    keyword.push(v.to_lowercase());
                 }
                 //duplicate genre translation as keyword
-                keyword.push(genre_map.translate(i).to_lowercase());
+                keyword.push(genre_map.translate(v).to_lowercase());
             }
         }
         if genre_facet.is_empty() {
@@ -317,51 +341,62 @@ impl BookWriter {
         }
         genre_facet.sort();
         genre_facet.dedup();
-        for i in genre_facet {
-            doc.add_facet(self.fields.facet, &i);
+        for v in genre_facet {
+            doc.add_facet(self.fields.facet, &v);
         }
         keyword.sort();
         keyword.dedup();
-        for i in keyword {
-            if !i.is_empty() {
-                let path = format!("/kw/{}", i);
+        for v in keyword {
+            if !v.is_empty() {
+                let path = format!("/kw/{}", v);
                 doc.add_facet(self.fields.facet, &path);
-                doc.add_text(self.fields.keyword, &i);
+                doc.add_text(self.fields.keyword, &v);
             }
         }
-        for i in &book.author {
-            let t = &i.to_string();
+        for (i, v) in book.author.iter().enumerate() {
+            let t = &v.to_string();
             if !t.is_empty() {
                 doc.add_text(self.fields.author, &t);
-                if let Some(name) = &i.last_name_normalized() {
+                if let Some(name) = &v.last_name_normalized() {
                     let first = name.chars().take(1).collect::<String>();
                     let path = format!("/author/{}/{}", &first, name); //first letter/last name in proper case
                     doc.add_facet(self.fields.facet, &path);
                 }
+                if i==0 {
+                    doc.add_u64(self.fields.sort_author, crate::sort::hash_desc(t));
+                }
             }
         }
-        for i in &book.src_author {
-            let t = &i.to_string();
+        for v in &book.src_author {
+            let t = &v.to_string();
             if !t.is_empty() {
                 doc.add_text(self.fields.src_author, &t);
-                if let Some(name) = &i.last_name_normalized() {
+                if let Some(name) = &v.last_name_normalized() {
                     let first = name.chars().next().unwrap_or('?');
                     let path = format!("/author/{}/{}", &first, name); //first letter/last name in proper case
                     doc.add_facet(self.fields.facet, &path);
                 }
             }
         }
-        for i in &book.translator {
-            let i = i.to_string();
-            if !i.is_empty() {
-                doc.add_text(self.fields.translator, &i)
+        for (i,v) in book.translator.iter().enumerate() {
+            let v = v.to_string();
+            if !v.is_empty() {
+                doc.add_text(self.fields.translator, &v);
+                if i==0 {
+                    doc.add_u64(self.fields.sort_translator, crate::sort::hash_desc(&v));
+                }
             }
         }
-        for i in &book.sequence {
-            doc.add_text(self.fields.sequence, &i);
+        for (i,v) in book.sequence.iter().enumerate() {
+            if !v.is_empty() {
+                doc.add_text(self.fields.sequence, &v);
+                if i==0 {
+                    doc.add_u64(self.fields.sort_sequence, crate::sort::hash_desc(v));
+                }
+            }
         }
-        for i in &book.seqnum {
-            doc.add_i64(self.fields.seqnum, *i);
+        for v in &book.seqnum {
+            doc.add_i64(self.fields.seqnum, *v);
         }
         if let Some(v) = &book.annotation {
             if !v.is_empty() {
@@ -582,63 +617,83 @@ impl BookReader {
     pub fn search_as_docs(
         &self,
         query: &dyn Query,
-        order: &str,
+        orderby: OrderBy,
         limit: usize,
         offset: usize,
     ) -> Result<Vec<Document>> {
         let searcher = self.reader.searcher();
-        debug!("query={:?} order={}", query, order);
+        debug!("query={:?} orderby={}", query, orderby);
         let mut docs = Vec::new();
-        if order == "default" {
-            let top_docs = searcher.search(query, &TopDocs::with_limit(limit + offset))?;
-            for (_score, doc_address) in top_docs.iter().skip(offset) {
-                let retrieved_doc = searcher.doc(*doc_address)?;
-                docs.push(retrieved_doc);
-            }
-        } else {
-            //dummy sort: get top-N relevant docs, sort them and apply offset+limit
-            let collector = &TopDocs::with_limit(MAX_MATCHES_BEFORE_ORDERING);
-            let mut all_docs: Vec<Document> = searcher
-                .search(query, collector)?
-                .iter()
-                .map(|(_score, doc_address)| searcher.doc(*doc_address))
-                .filter_map(|x| x.ok())
-                .collect();
-            let mut offset = offset;
-            match order {
-                "title" => all_docs.sort_by_cached_key(|d| {
-                    LocalString(
-                        first_str(d, self.fields.title)
-                            .unwrap_or_default()
-                            .to_lowercase(),
-                    )
-                }),
-                "author" => all_docs.sort_by_cached_key(|d| {
-                    LocalString(joined_values(d, self.fields.author).to_lowercase())
-                }),
-                "translator" => all_docs.sort_by_cached_key(|d| {
-                    LocalString(joined_values(d, self.fields.translator).to_lowercase())
-                }),
-                "sequence" => all_docs.sort_by_cached_key(|d| {
-                    (
+        match orderby {
+            OrderBy::Default => {
+                //order by score
+                let top_docs = searcher.search(query, &TopDocs::with_limit(limit + offset))?;
+                for (_score, doc_address) in top_docs.iter().skip(offset) {
+                    let retrieved_doc = searcher.doc(*doc_address)?;
+                    docs.push(retrieved_doc);
+                }
+            },
+            OrderBy::Random => {
+                //dummy sort: get top-N relevant docs, sort by random number and fetch [0..limit)
+                //offset is not applicable
+                let collector = TopDocs::with_limit(MAX_MATCHES_BEFORE_ORDERING);
+                let mut some_docs: Vec<Document> = searcher
+                    .search(query, &collector)?
+                    .iter()
+                    .map(|(_score, doc_address)| searcher.doc(*doc_address))
+                    .filter_map(|x| x.ok())
+                    .collect();
+                let mut rnd = rand::thread_rng();
+                some_docs.sort_by_cached_key(|_| rnd.gen::<i64>());
+                for doc in some_docs.into_iter().take(limit) {
+                    docs.push(doc);
+                }
+            },
+            OrderBy::Title | OrderBy::Author | OrderBy::Translator | OrderBy::Sequence => {
+                //get partially sorted list by pre-calculated hash (stored as u64 fast-field)
+                //then reorder list by exact sort routine
+                //it is fast, but may cause some discrepancy between pages
+                let sort_field = match orderby {
+                    OrderBy::Author => self.fields.sort_author,
+                    OrderBy::Translator => self.fields.sort_translator,
+                    OrderBy::Sequence => self.fields.sort_sequence,
+                    _ => self.fields.sort_title
+                };
+                let collector = TopDocs::with_limit(limit+offset)
+                    .order_by_u64_field(sort_field);
+                docs = searcher
+                    .search(query, &collector)?
+                    .iter()
+                    .skip(offset)
+                    .map(|(_score, doc_address)| searcher.doc(*doc_address) )
+                    .filter_map(|x| x.ok())
+                    .collect();
+                match orderby {
+                    OrderBy::Author => docs.sort_by_cached_key(|d| {
+                        LocalString(joined_values(d, self.fields.author).to_lowercase())
+                    }),
+                    OrderBy::Translator => docs.sort_by_cached_key(|d| {
+                        LocalString(joined_values(d, self.fields.translator).to_lowercase())
+                    }),
+                    OrderBy::Sequence => docs.sort_by_cached_key(|d| {
+                        (
+                            LocalString(
+                                first_str(d, self.fields.sequence)
+                                    .unwrap_or_default()
+                                    .to_lowercase(),
+                            ),
+                            first_i64_value(d, self.fields.seqnum),
+                        )
+                    }),
+                    _ => docs.sort_by_cached_key(|d| {
                         LocalString(
-                            first_str(d, self.fields.sequence)
+                            first_str(d, self.fields.title)
                                 .unwrap_or_default()
                                 .to_lowercase(),
-                        ),
-                        first_i64_value(d, self.fields.seqnum),
-                    )
-                }),
-                "random" => {
-                    let mut rnd = rand::thread_rng();
-                    all_docs.sort_by_cached_key(|_| rnd.gen::<i64>());
-                    offset = 0;
+                        )
+                    }),
                 }
-                x => return Err(tantivy::TantivyError::InvalidArgument(x.to_string())),
-            }
-            for doc in all_docs.into_iter().skip(offset).take(limit) {
-                docs.push(doc);
-            }
+            },
         }
         Ok(docs)
     }
@@ -648,12 +703,12 @@ impl BookReader {
         query: &str,
         stemming: bool,
         disjunction: bool,
-        order: &str,
+        orderby: OrderBy,
         limit: usize,
         offset: usize,
     ) -> Result<String> {
         let query = self.parse_query(query, stemming, disjunction)?;
-        let docs = self.search_as_docs(&query, order, limit, offset)?;
+        let docs = self.search_as_docs(&query, orderby, limit, offset)?;
         let matches: Vec<String> = docs.iter().map(|doc| self.schema.to_json(doc)).collect();
         let total = self.reader.searcher().search(&query, &Count)?;
         Ok(format!(
@@ -668,12 +723,12 @@ impl BookReader {
         query: &str,
         stemming: bool,
         disjunction: bool,
-        order: &str,
+        orderby: OrderBy,
         limit: usize,
         offset: usize,
     ) -> Result<Vec<BookMeta>> {
         let query = self.parse_query(query, stemming, disjunction)?;
-        let docs = self.search_as_docs(&query, order, limit, offset)?;
+        let docs = self.search_as_docs(&query, orderby, limit, offset)?;
         let mut matches = Vec::new();
         for doc in docs {
             let mut zipfile = "".to_string();

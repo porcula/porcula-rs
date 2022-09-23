@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::io::prelude::*;
 use std::path::Path;
 use std::str;
+use std::str::FromStr;
 
 use crate::cmd::*;
 use crate::sort::LocalString;
@@ -174,10 +175,11 @@ fn handler_search(req: &Request, fts: &BookReader) -> Response {
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(0);
-            let order: String = req
-                .get_param("order")
-                .unwrap_or_else(|| String::from("default"));
-            match fts.search_as_json(&query, stemming, disjunction, &order, limit, offset) {
+            let orderby = match req.get_param("order") {
+                Some(s) => crate::fts::OrderBy::from_str(&s).unwrap_or_default(),
+                None => crate::fts::OrderBy::default()
+            };
+            match fts.search_as_json(&query, stemming, disjunction, orderby, limit, offset) {
                 Ok(json) => Response::from_data("application/json", json).with_no_cache(),
                 Err(e) => Response::text(e.to_string()).with_status_code(500),
             }
@@ -319,14 +321,14 @@ pub fn read_zipped_file(books_path: &Path, zipfile: &str, filename: &str) -> Vec
     content
 }
 
-fn atom_mime_type() -> String {
-    "application/atom+xml".to_string()
+fn atom_mime_type() -> Option<String> {
+    Some("application/atom+xml".to_string())
 }
-fn atom_cat_mime_type() -> String {
-    "application/atom+xml;profile=opds-catalog".to_string()
+fn atom_cat_mime_type() -> Option<String> {
+    Some("application/atom+xml;profile=opds-catalog".to_string())
 }
-fn atom_nav_mime_type() -> String {
-    "application/atom+xml;profile=opds-catalog;kind=navigation".to_string()
+fn atom_nav_mime_type() -> Option<String> {
+    Some("application/atom+xml;profile=opds-catalog;kind=navigation".to_string())
 }
 
 fn opds_response(
@@ -344,17 +346,17 @@ fn opds_response(
     let mut links = vec![
         LinkBuilder::default()
             .href(&abs_url)
-            .rel("self")
+            .rel("self".to_string())
             .mime_type(atom_nav_mime_type())
             .build(),
         LinkBuilder::default()
-            .href("/porcula/opds")
-            .rel("start")
+            .href("/porcula/opds".to_string())
+            .rel("start".to_string())
             .mime_type(atom_nav_mime_type())
             .build(),
         LinkBuilder::default()
-            .href("/porcula/opds/search/{searchTerms}")
-            .rel("search")
+            .href("/porcula/opds/search/{searchTerms}".to_string())
+            .rel("search".to_string())
             .mime_type(atom_mime_type())
             .build(),
     ];
@@ -362,7 +364,7 @@ fn opds_response(
         links.push(
             LinkBuilder::default()
                 .href(url)
-                .rel("prev")
+                .rel("prev".to_string())
                 .title(Some(
                     tr!["Previous Page", "Предыдущая страница"].to_string(),
                 ))
@@ -374,7 +376,7 @@ fn opds_response(
         links.push(
             LinkBuilder::default()
                 .href(url)
-                .rel("next")
+                .rel("next".to_string())
                 .title(Some(tr!["Next Page", "Следующая страница"].to_string()))
                 .mime_type(atom_cat_mime_type())
                 .build(),
@@ -401,24 +403,25 @@ fn opds_root(req: &Request, fts: &BookReader) -> Response {
     let links = vec![
         LinkBuilder::default()
             .href(format!("{}/porcula/opds/author", root_url))
-            .rel("alternate")
+            .rel("alternate".to_string())
             .build(),
         LinkBuilder::default()
-            .href("/porcula/opds/author")
-            .rel("subsection")
+            .href("/porcula/opds/author".to_string())
+            .rel("subsection".to_string())
             .mime_type(atom_nav_mime_type())
             .build(),
     ];
     e.push(
         EntryBuilder::default()
             .updated(chrono::Utc::now())
-            .id("m:1")
+            .id("m:1".to_string())
             .title(tr!["By author", "По авторам"])
             .links(links)
             .content(
-                ContentBuilder::default()
-                    .value(format!("{}: {}", tr!["Books", "Книг"], book_count))
+                Some(ContentBuilder::default()
+                    .value(Some(format!("{}: {}", tr!["Books", "Книг"], book_count)))
                     .build(),
+                )
             )
             .build(),
     );
@@ -426,25 +429,25 @@ fn opds_root(req: &Request, fts: &BookReader) -> Response {
     let links = vec![
         LinkBuilder::default()
             .href(format!("{}/porcula/opds/genre", root_url))
-            .rel("alternate")
+            .rel("alternate".to_string())
             .build(),
         LinkBuilder::default()
-            .href("/porcula/opds/genre")
-            .rel("subsection")
+            .href("/porcula/opds/genre".to_string())
+            .rel("subsection".to_string())
             .mime_type(atom_nav_mime_type())
             .build(),
     ];
     e.push(
         EntryBuilder::default()
             .updated(chrono::Utc::now())
-            .id("m:2")
+            .id("m:2".to_string())
             .title(tr!["By genre", "По жанрам"])
             .links(links)
             .content(
-                ContentBuilder::default()
-                    .value(format!("{}: {}", tr!["Books", "Книг"], book_count))
+                Some(ContentBuilder::default()
+                    .value(Some(format!("{}: {}", tr!["Books", "Книг"], book_count)))
                     .build(),
-            )
+            ))
             .build(),
     );
 
@@ -460,18 +463,18 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
     let links = vec![
         LinkBuilder::default()
             .href(abs_url)
-            .rel("alternate")
+            .rel("alternate".to_string())
             .build(),
         LinkBuilder::default()
             .href(rel_url)
-            .rel("subsection")
+            .rel("subsection".to_string())
             .mime_type(atom_nav_mime_type())
             .build(),
     ];
     e.push(
         EntryBuilder::default()
             .updated(chrono::Utc::now())
-            .id("st:1")
+            .id("st:1".to_string())
             .title(tr!["Search by title", "Поиск по наименованию"])
             .links(links)
             .build(),
@@ -482,18 +485,18 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
     let links = vec![
         LinkBuilder::default()
             .href(abs_url)
-            .rel("alternate")
+            .rel("alternate".to_string())
             .build(),
         LinkBuilder::default()
             .href(rel_url)
-            .rel("subsection")
+            .rel("subsection".to_string())
             .mime_type(atom_nav_mime_type())
             .build(),
     ];
     e.push(
         EntryBuilder::default()
             .updated(chrono::Utc::now())
-            .id("st:2")
+            .id("st:2".to_string())
             .title(tr!["Search by author", "Поиск по автору"])
             .links(links)
             .build(),
@@ -504,18 +507,18 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
     let links = vec![
         LinkBuilder::default()
             .href(abs_url)
-            .rel("alternate")
+            .rel("alternate".to_string())
             .build(),
         LinkBuilder::default()
             .href(rel_url)
-            .rel("subsection")
+            .rel("subsection".to_string())
             .mime_type(atom_nav_mime_type())
             .build(),
     ];
     e.push(
         EntryBuilder::default()
             .updated(chrono::Utc::now())
-            .id("st:3")
+            .id("st:3".to_string())
             .title(tr!["Search in book text", "Поиск по тексту книги"])
             .links(links)
             .build(),
@@ -526,18 +529,18 @@ fn opds_search_where(req: &Request, query: &str) -> Response {
     let links = vec![
         LinkBuilder::default()
             .href(abs_url)
-            .rel("alternate")
+            .rel("alternate".to_string())
             .build(),
         LinkBuilder::default()
             .href(rel_url)
-            .rel("subsection")
+            .rel("subsection".to_string())
             .mime_type(atom_nav_mime_type())
             .build(),
     ];
     e.push(
         EntryBuilder::default()
             .updated(chrono::Utc::now())
-            .id("st:3")
+            .id("st:3".to_string())
             .title(tr!["Search in series", "Поиск по серии книг"])
             .links(links)
             .build(),
@@ -600,11 +603,11 @@ fn opds_facet(
                 let links = vec![
                     LinkBuilder::default()
                         .href(&abs_url)
-                        .rel("alternate")
+                        .rel("alternate".to_string())
                         .build(),
                     LinkBuilder::default()
                         .href(&rel_url)
-                        .rel("subsection")
+                        .rel("subsection".to_string())
                         .mime_type(atom_nav_mime_type())
                         .build(),
                 ];
@@ -614,10 +617,10 @@ fn opds_facet(
                         .id(&abs_url)
                         .title(title)
                         .content(
-                            ContentBuilder::default()
-                                .value(format!("{}: {}", tr!["Books", "Книг"], count))
+                            Some(ContentBuilder::default()
+                                .value(Some(format!("{}: {}", tr!["Books", "Книг"], count)))
                                 .build(),
-                        )
+                        ))
                         .links(links)
                         .build(),
                 );
@@ -631,12 +634,13 @@ fn opds_facet(
 fn opds_search_books(
     req: &Request,
     query: &str,
-    order: &str,
+    orderby: &str,
     page: usize,
     translation: &HashMap<String, String>,
     fts: &BookReader,
 ) -> Response {
     let (root_url, req_path) = split_request_url(req);
+    let orderby = crate::fts::OrderBy::from_str(orderby).unwrap_or_default();
     let stemming = true; //TODO: url parameter
     let disjunction = false; //TODO: url parameter
     let limit = OPDS_PAGE_ENTRIES;
@@ -650,7 +654,7 @@ fn opds_search_books(
         path_parts[n] = format!("{}", page - 1);
         Some(path_parts.join("/"))
     };
-    match fts.search_as_meta(query, stemming, disjunction, order, limit, offset) {
+    match fts.search_as_meta(query, stemming, disjunction, orderby, limit, offset) {
         Ok(data) => {
             let next_url = if data.len() < limit {
                 None
@@ -675,17 +679,17 @@ fn opds_search_books(
                 let links = vec![
                     LinkBuilder::default()
                         .href(&abs_url)
-                        .rel("alternate")
+                        .rel("alternate".to_string())
                         .build(),
                     LinkBuilder::default()
                         .href(&rel_url)
-                        .rel("http://opds-spec.org/acquisition/open-access")
-                        .mime_type(Some("application/fb2+xml".into()))
+                        .rel("http://opds-spec.org/acquisition/open-access".to_string())
+                        .mime_type(Some("application/fb2+xml".to_string()))
                         .build(),
                     LinkBuilder::default()
                         .href(&cover_url)
-                        .rel("http://opds-spec.org/image")
-                        .mime_type(Some("image/jpeg".into()))
+                        .rel("http://opds-spec.org/image".to_string())
+                        .mime_type(Some("image/jpeg".to_string()))
                         .build(),
                 ];
                 let mut b = EntryBuilder::default()
@@ -694,7 +698,7 @@ fn opds_search_books(
                     .links(links)
                     .build();
                 if let Some(x) = i.annotation {
-                    b.set_content(Some(ContentBuilder::default().value(x).build()));
+                    b.set_content(Some(ContentBuilder::default().value(Some(x)).build()));
                 }
                 if let Some(sequence) = i.sequence {
                     let text = format!(

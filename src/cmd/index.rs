@@ -48,17 +48,13 @@ impl std::ops::Add for ProcessStats {
     }
 }
 
+#[derive(Default)]
 enum BookState {
-    Invalid,
+    #[default]
     Ignored,
+    Invalid,
     WholeZip,
     Valid(Box<Book>),
-}
-
-impl Default for BookState {
-    fn default() -> Self {
-        BookState::Ignored
-    }
 }
 
 #[derive(Default)]
