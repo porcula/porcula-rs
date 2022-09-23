@@ -94,7 +94,6 @@
     </div>
     <div id="loading" style="display:none"></div>
 
-
     <script src="jquery-1.12.4.min.js"></script>
     <script src="common.js"></script>
     <script>
@@ -488,6 +487,7 @@
             $("#book_count").text(index_info.count);
             if (index_info.settings.stemmer=="off") {
                 $("#stemming").hide();
+                $("label[for=stemming").hide();
             }
             if (!index_info.settings.options.annotation) {
                 $("#f_annotation").hide();
