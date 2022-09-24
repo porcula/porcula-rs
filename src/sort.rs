@@ -135,9 +135,9 @@ fn test_sort() {
     assert_eq!(a, b);
 }
 
- /// hashing first chars of string for sorting in ascending order using custom collation
- pub fn hash_asc(s: &str) -> u64 {
-    assert!(ORDER.len()<=253, "ORDER charset too big"); //reserve two values
+/// hashing first chars of string for sorting in ascending order using custom collation
+pub fn hash_asc(s: &str) -> u64 {
+    assert!(ORDER.len() <= 253, "ORDER charset too big"); //reserve two values
     const WHITESPACE: u8 = 0x00;
     let next_index = (ORDER.len() as u8) + 2;
     let mut hash: u64 = 0;
@@ -161,7 +161,9 @@ fn test_sort() {
                 }
             }
         };
-        if octet==WHITESPACE && prev==WHITESPACE { continue } //treat sequental spaces as one
+        if octet == WHITESPACE && prev == WHITESPACE {
+            continue;
+        } //treat sequental spaces as one
         hash |= (octet as u64) << offset;
         prev = octet;
     }
@@ -172,10 +174,9 @@ fn test_sort() {
 }
 
 /// hashing first chars of string for sorting in descending order using custom collation
- pub fn hash_desc(s: &str) -> u64 {
-    ! hash_asc(s)
- }
- 
+pub fn hash_desc(s: &str) -> u64 {
+    !hash_asc(s)
+}
 
 #[test]
 #[rustfmt::skip]

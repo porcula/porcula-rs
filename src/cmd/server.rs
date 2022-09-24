@@ -177,7 +177,7 @@ fn handler_search(req: &Request, fts: &BookReader) -> Response {
                 .unwrap_or(0);
             let orderby = match req.get_param("order") {
                 Some(s) => crate::fts::OrderBy::from_str(&s).unwrap_or_default(),
-                None => crate::fts::OrderBy::default()
+                None => crate::fts::OrderBy::default(),
             };
             match fts.search_as_json(&query, stemming, disjunction, orderby, limit, offset) {
                 Ok(json) => Response::from_data("application/json", json).with_no_cache(),
@@ -417,12 +417,11 @@ fn opds_root(req: &Request, fts: &BookReader) -> Response {
             .id("m:1".to_string())
             .title(tr!["By author", "По авторам"])
             .links(links)
-            .content(
-                Some(ContentBuilder::default()
+            .content(Some(
+                ContentBuilder::default()
                     .value(Some(format!("{}: {}", tr!["Books", "Книг"], book_count)))
                     .build(),
-                )
-            )
+            ))
             .build(),
     );
 
@@ -443,8 +442,8 @@ fn opds_root(req: &Request, fts: &BookReader) -> Response {
             .id("m:2".to_string())
             .title(tr!["By genre", "По жанрам"])
             .links(links)
-            .content(
-                Some(ContentBuilder::default()
+            .content(Some(
+                ContentBuilder::default()
                     .value(Some(format!("{}: {}", tr!["Books", "Книг"], book_count)))
                     .build(),
             ))
@@ -616,8 +615,8 @@ fn opds_facet(
                         .updated(updated)
                         .id(&abs_url)
                         .title(title)
-                        .content(
-                            Some(ContentBuilder::default()
+                        .content(Some(
+                            ContentBuilder::default()
                                 .value(Some(format!("{}: {}", tr!["Books", "Книг"], count)))
                                 .build(),
                         ))

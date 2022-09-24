@@ -352,7 +352,7 @@ pub fn run_index(args: &IndexArgs, app: Application) -> ProcessResult {
                             let parsed_book = process_file(
                                 zipfile,
                                 &filename,
-                                data,
+                                data.as_ref(),
                                 lang_filter,
                                 book_formats,
                                 opts,
@@ -506,7 +506,7 @@ fn is_zip_file(entry: &DirEntry) -> bool {
 fn process_file<F>(
     zipfile: &str,
     filename: &str,
-    data: Vec<u8>,
+    data: &[u8],
     lang_filter: F,
     book_formats: &BookFormats,
     opts: &ParseOpts,
@@ -522,14 +522,9 @@ where
     let ext = file_extension(filename);
     if let Some(book_format) = book_formats.get(&ext.as_ref()) {
         //filter eBook by extension
-        let mut buf_file = std::io::Cursor::new(data);
         let pt = Instant::now();
-        let parsed_book = book_format.parse(
-            &mut buf_file,
-            opts.body || opts.xbody,
-            opts.annotation,
-            opts.cover,
-        );
+        let parsed_book =
+            book_format.parse(data, opts.body || opts.xbody, opts.annotation, opts.cover);
         res.time_to_parse = pt.elapsed();
         match parsed_book {
             Ok(mut b) => {

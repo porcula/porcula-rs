@@ -1,6 +1,5 @@
 use deepsize::DeepSizeOf;
 use std::collections::HashMap;
-use std::io::BufRead;
 
 #[derive(Default, Debug, DeepSizeOf)]
 pub struct Person {
@@ -55,7 +54,7 @@ pub trait BookFormat: Send + Sync {
 
     fn parse(
         &self,
-        reader: &mut dyn BufRead,
+        raw_xml: &[u8],
         with_body: bool,
         with_annotation: bool,
         with_cover: bool,

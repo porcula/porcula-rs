@@ -32,7 +32,7 @@ lazy_static = "1.4"
 ctrlc = "3.2"
 deepsize = "0.2"
 tantivy = { version = "0.18", features = ["mmap"] }
-quick-xml = { version = "0.23", features = ["encoding"] }
+quick-xml = { version = "0.25", features = ["encoding"] }
 image = { version = "0.24", default-features = false, features = ["jpeg","png","gif","bmp"] }
 encoding = { version = "0.2", default-features = false }
 clap = { version = "3.1", features = ["derive"] }

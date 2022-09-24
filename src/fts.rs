@@ -9,7 +9,10 @@ use tantivy::query::{
     AllQuery, BooleanQuery, FuzzyTermQuery, Occur, Query, QueryParser, QueryParserError,
     RegexQuery, TermQuery,
 };
-use tantivy::schema::{Schema, SchemaBuilder, Field, TextFieldIndexing, IndexRecordOption, TextOptions, Facet, Document, Value, Term, INDEXED, STORED, STRING, FAST};
+use tantivy::schema::{
+    Document, Facet, Field, IndexRecordOption, Schema, SchemaBuilder, Term, TextFieldIndexing,
+    TextOptions, Value, FAST, INDEXED, STORED, STRING,
+};
 use tantivy::tokenizer;
 use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, Searcher, TantivyError};
 
@@ -70,11 +73,14 @@ pub struct BookMeta {
 #[derive(Default, Eq, PartialEq, Debug, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "lowercase")]
 pub enum OrderBy {
-    #[default] Default, //by score
+    #[default]
+    Default, //by score
     Random,
-    Title, Author, Translator, Sequence,
-}    
-
+    Title,
+    Author,
+    Translator,
+    Sequence,
+}
 
 pub enum IndexListDetails {
     Full,
@@ -143,7 +149,7 @@ impl Fields {
             cover_image: schema_builder.add_text_field("cover_image", STORED),
             xtitle: schema_builder.add_text_field("xtitle", nonstored_stemmed_text_opts.clone()),
             xannotation: schema_builder.add_text_field("xannotation", nonstored_stemmed_text_opts),
-            sort_title: schema_builder.add_u64_field("sort_title", FAST|STORED),
+            sort_title: schema_builder.add_u64_field("sort_title", FAST | STORED),
             sort_author: schema_builder.add_u64_field("sort_author", FAST),
             sort_translator: schema_builder.add_u64_field("sort_translator", FAST),
             sort_sequence: schema_builder.add_u64_field("sort_sequence", FAST),
@@ -216,7 +222,11 @@ fn get_stemmed_tokenizer(stemmer: &str) -> tokenizer::TextAnalyzer {
         "sv" => tokenizer::Language::Swedish,
         "ta" => tokenizer::Language::Tamil,
         "tr" => tokenizer::Language::Turkish,
-        _ => return tokenizer::TokenizerManager::default().get("default").unwrap(),
+        _ => {
+            return tokenizer::TokenizerManager::default()
+                .get("default")
+                .unwrap()
+        }
     };
     tokenizer::TextAnalyzer::from(tokenizer::SimpleTokenizer)
         .filter(tokenizer::RemoveLongFilter::limit(40))
@@ -313,7 +323,7 @@ impl BookWriter {
                 if self.use_stemmer {
                     doc.add_text(self.fields.xtitle, &v);
                 }
-                if i==0 {
+                if i == 0 {
                     doc.add_u64(self.fields.sort_title, crate::sort::hash_desc(v));
                 }
             }
@@ -362,7 +372,7 @@ impl BookWriter {
                     let path = format!("/author/{}/{}", &first, name); //first letter/last name in proper case
                     doc.add_facet(self.fields.facet, &path);
                 }
-                if i==0 {
+                if i == 0 {
                     doc.add_u64(self.fields.sort_author, crate::sort::hash_desc(t));
                 }
             }
@@ -378,19 +388,19 @@ impl BookWriter {
                 }
             }
         }
-        for (i,v) in book.translator.iter().enumerate() {
+        for (i, v) in book.translator.iter().enumerate() {
             let v = v.to_string();
             if !v.is_empty() {
                 doc.add_text(self.fields.translator, &v);
-                if i==0 {
+                if i == 0 {
                     doc.add_u64(self.fields.sort_translator, crate::sort::hash_desc(&v));
                 }
             }
         }
-        for (i,v) in book.sequence.iter().enumerate() {
+        for (i, v) in book.sequence.iter().enumerate() {
             if !v.is_empty() {
                 doc.add_text(self.fields.sequence, &v);
-                if i==0 {
+                if i == 0 {
                     doc.add_u64(self.fields.sort_sequence, crate::sort::hash_desc(v));
                 }
             }
@@ -632,7 +642,7 @@ impl BookReader {
                     let retrieved_doc = searcher.doc(*doc_address)?;
                     docs.push(retrieved_doc);
                 }
-            },
+            }
             OrderBy::Random => {
                 //dummy sort: get top-N relevant docs, sort by random number and fetch [0..limit)
                 //offset is not applicable
@@ -648,7 +658,7 @@ impl BookReader {
                 for doc in some_docs.into_iter().take(limit) {
                     docs.push(doc);
                 }
-            },
+            }
             OrderBy::Title | OrderBy::Author | OrderBy::Translator | OrderBy::Sequence => {
                 //get partially sorted list by pre-calculated hash (stored as u64 fast-field)
                 //then reorder list by exact sort routine
@@ -657,15 +667,14 @@ impl BookReader {
                     OrderBy::Author => self.fields.sort_author,
                     OrderBy::Translator => self.fields.sort_translator,
                     OrderBy::Sequence => self.fields.sort_sequence,
-                    _ => self.fields.sort_title
+                    _ => self.fields.sort_title,
                 };
-                let collector = TopDocs::with_limit(limit+offset)
-                    .order_by_u64_field(sort_field);
+                let collector = TopDocs::with_limit(limit + offset).order_by_u64_field(sort_field);
                 docs = searcher
                     .search(query, &collector)?
                     .iter()
                     .skip(offset)
-                    .map(|(_score, doc_address)| searcher.doc(*doc_address) )
+                    .map(|(_score, doc_address)| searcher.doc(*doc_address))
                     .filter_map(|x| x.ok())
                     .collect();
                 match orderby {
@@ -693,7 +702,7 @@ impl BookReader {
                         )
                     }),
                 }
-            },
+            }
         }
         Ok(docs)
     }
