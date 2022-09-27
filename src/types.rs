@@ -34,6 +34,7 @@ pub struct Book {
 pub enum ParserError {
     EmptyBody,
     EmptyTitle,
+    Decoding(String),
 }
 
 impl std::fmt::Display for ParserError {
@@ -41,6 +42,7 @@ impl std::fmt::Display for ParserError {
         match self {
             ParserError::EmptyBody => write!(f, "Empty body"),
             ParserError::EmptyTitle => write!(f, "Empty title"),
+            ParserError::Decoding(s) => write!(f, "Decoding error {}", s),
         }
     }
 }
@@ -54,13 +56,13 @@ pub trait BookFormat: Send + Sync {
 
     fn parse(
         &self,
-        raw_xml: &[u8],
+        raw: &[u8],
         with_body: bool,
         with_annotation: bool,
         with_cover: bool,
     ) -> ParserResult;
 
-    fn str_to_html(&self, decoded_xml: &str) -> RenderResult;
+    fn render_to_html(&self, raw: &[u8]) -> RenderResult;
 }
 
 pub type BookFormats = HashMap<&'static str, Box<dyn BookFormat + Send + Sync>>;

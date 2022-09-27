@@ -238,16 +238,12 @@ fn handler_render(
     let ext = file_extension(filename);
     match app.book_formats.get(&ext.as_ref()) {
         Some(book_format) => {
-            let (title, enc) = match fts.get_book_info(zipfile, filename).unwrap() {
+            let (title, _enc) = match fts.get_book_info(zipfile, filename).unwrap() {
                 Some(x) => x,
                 None => (filename.to_string(), "UTF-8".to_string()), //book not indexed yet, try defaults
             };
-            let content = read_zipped_file(&app.books_path, zipfile, filename);
-            let coder = encoding::label::encoding_from_whatwg_label(&enc).unwrap();
-            let utf8 = coder
-                .decode(&content, encoding::DecoderTrap::Ignore)
-                .unwrap();
-            let content = book_format.str_to_html(&utf8).unwrap(); //result is Vec<u8> but valid UTF-8
+            let raw = read_zipped_file(&app.books_path, zipfile, filename);
+            let content = book_format.render_to_html(&raw).unwrap(); //result is Vec<u8> but valid UTF-8
             const TEMPLATE: &str = "render.html";
             const TEMPLATE_SIZE: usize = 1000; //approximate
             let template = Path::new(DEFAULT_ASSETS_DIR).join(TEMPLATE);

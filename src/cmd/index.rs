@@ -1,3 +1,4 @@
+use encoding_rs::Encoding;
 use log::{debug, error, info};
 use rayon::prelude::*;
 use regex::Regex;
@@ -395,34 +396,42 @@ pub fn run_index(args: &IndexArgs, app: Application) -> ProcessResult {
         let total = tt.elapsed().as_millis() + 1;
         let canceled = canceled.load(Ordering::SeqCst);
         if canceled {
-            info!("{}", tr!["Indexing canceled", "Индексация прервана"]);
+            info!("----{}----", tr!["INDEXING CANCELED", "ИНДЕКСАЦИЯ ПРЕРВАНА"]);
         } else {
-            info!("{}", tr!["Indexing done", "Индексация завершена"]);
+            info!("----{}----", tr!["INDEXING DONE", "ИНДЕКСАЦИЯ ЗАВЕРШЕНА"]);
         }
 
         info!(
-            "{}: {}/{}, {} {} = {}/{} MB",
+            "{}: {} {}, {} {}, {} {}",
             tr!["Archives", "Архивов"],
-            zip_processed,
             zip_total_count,
+            tr!["found", "найдено"],
+            zip_processed,
+            tr!["processed", "обработано"],
             zip_skipped,
             tr!["skipped", "пропущено"],
-            gstats.packed_size / 1024 / 1024,
-            zip_total_size / 1024 / 1024,
         );
         info!(
-            "{}: {} {}, {} {}, {} {} = {} {} / {} {}",
+            "{}: {} {}, {} {}, {} {}",
             tr!["Books", "Книг"],
             cstats.book_indexed,
             tr!["added", "добавлено"],
-            gstats.book_ignored,
-            tr!["ignored", "проигнорировано"],
             gstats.book_skipped,
             tr!["skipped", "пропущено"],
-            gstats.parsed_size / 1024 / 1024,
-            tr!["MB indexed", "МБ проиндексировано"],
-            gstats.unpacked_size / 1024 / 1024,
+            gstats.book_ignored,
+            tr!["ignored", "проигнорировано"],
+        );
+        info!(
+            "{}: {} {}, {} {}, {} {}, {} {}",
+            tr!["Size", "Размер"],
+            zip_total_size / 1024 / 1024,
+            tr!["MB archive", "МБ архив"],
+            gstats.packed_size / 1024 / 1024,
             tr!["MB readed", "МБ прочитано"],
+            gstats.unpacked_size / 1024 / 1024,
+            tr!["MB unpacked", "МБ распаковано"],
+            gstats.parsed_size / 1024 / 1024,
+            tr!["MB indexed", "МБ индексировано"],
         );
         info!(
             "{}: {}, {}: {} MB/s",
@@ -487,12 +496,10 @@ fn format_duration(ms: u128) -> String {
 fn decode_filename(raw_filename: &[u8]) -> Option<String> {
     let (charset, confidence, _language) = chardet::detect(raw_filename);
     if confidence > 0.8 {
-        if let Some(coder) =
-            encoding::label::encoding_from_whatwg_label(chardet::charset2encoding(&charset))
-        {
-            if let Ok(utf8) = coder.decode(raw_filename, encoding::DecoderTrap::Ignore) {
-                return Some(utf8);
-            }
+        let enc_label = chardet::charset2encoding(&charset);
+        if let Some(encoding) = Encoding::for_label(enc_label.as_bytes()) {
+            let (utf8, _enc, _malformed) = encoding.decode(raw_filename);
+            return Some(utf8.to_string());
         }
     }
     None

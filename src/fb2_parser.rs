@@ -1,4 +1,5 @@
 use crate::types::*;
+use encoding_rs::{Encoding, UTF_16BE, UTF_16LE, UTF_8};
 use quick_xml::events::attributes::{Attribute, Attributes};
 use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::name::QName;
@@ -75,12 +76,18 @@ impl BookFormat for Fb2BookFormat {
     #[allow(clippy::cognitive_complexity, clippy::single_match)]
     fn parse(
         &self,
-        raw_xml: &[u8],
+        raw: &[u8],
         with_body: bool,
         with_annotation: bool,
         with_cover: bool,
     ) -> Result<Book, ParserError> {
-        let mut xml = quick_xml::Reader::from_reader(raw_xml);
+        let mut warning = Vec::<String>::new();
+        let encoding = detect_xml_encoding(raw);
+        let (xml_str, _enc, malformed) = encoding.decode(raw);
+        if malformed {
+            warning.push("malformed characters replaced".to_string());
+        }
+        let mut xml = quick_xml::Reader::from_reader(xml_str.as_ref().as_bytes());
         xml.trim_text(true);
         let mut mode = XMode::Start;
         let mut tag: Vec<u8> = vec![];
@@ -102,7 +109,6 @@ impl BookFormat for Fb2BookFormat {
         let mut date = Vec::<String>::new();
         let mut annotation = Vec::<String>::new();
         let mut body = Vec::<String>::new();
-        let mut warning = Vec::<String>::new();
         loop {
             match xml.read_event() {
                 //continue processing non-valid XML
@@ -477,7 +483,7 @@ impl BookFormat for Fb2BookFormat {
 
         Ok(Book {
             id,
-            encoding: xml.decoder().encoding().name().to_string(),
+            encoding: encoding.name().to_string(),
             length,
             title,
             lang,
@@ -505,10 +511,12 @@ impl BookFormat for Fb2BookFormat {
     }
 
     #[allow(clippy::cognitive_complexity, clippy::single_match)]
-    fn str_to_html(&self, decoded_xml: &str) -> RenderResult {
+    fn render_to_html(&self, raw: &[u8]) -> RenderResult {
+        let encoding = detect_xml_encoding(raw);
+        let (xml_str, _enc, _malformed) = encoding.decode(raw);
+        let mut xml = quick_xml::Reader::from_reader(xml_str.as_ref().as_bytes());
         let mut writer = quick_xml::Writer::new(std::io::Cursor::new(Vec::new()));
         let mut res = Vec::<Event>::new();
-        let mut xml = quick_xml::Reader::from_str(decoded_xml);
         xml.expand_empty_elements(true); //for compatibility with HTML4 <tag/> -> <tag></tag>
         let mut mode = XMode::Start;
         let mut img = HashMap::<Cow<[u8]>, (Cow<[u8]>, Cow<[u8]>)>::new(); //image-id -> (content-type,base64-data)
@@ -702,7 +710,7 @@ impl BookFormat for Fb2BookFormat {
         // <tag aaa="bbb">xxx</tag> -> <div><span class="name">tag</span><span class="value">aaa=bbb xxx</span><div>
         let attrs = vec![Attribute::from(("class", "description"))];
         res.push(Event::Start(BytesStart::new("div").with_attributes(attrs)));
-        let mut xml = quick_xml::Reader::from_str(&decoded_xml[description_start..description_end]);
+        let mut xml = quick_xml::Reader::from_str(&xml_str[description_start..description_end]);
         xml.expand_empty_elements(true);
         loop {
             match xml.read_event() {
@@ -811,4 +819,33 @@ pub fn try_decode_base64(b64: &[u8]) -> Result<(Vec<u8>, String), String> {
         Err(e) => return Err(format!("Invalid image: {}", e)),
     }
     Ok((buf, warning))
+}
+
+fn find_raw(needle: &[u8], haystack: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+fn detect_xml_encoding<'a>(head: &'a [u8]) -> &'static Encoding {
+    let mut enc: &Encoding = UTF_8;
+    if head.len() > 3 {
+        match (head[0], head[1], head[2]) {
+            (0xEF, 0xBB, 0xBF) => enc = UTF_8, //BOM
+            (0xFF, 0xFE, _) => enc = UTF_16LE, //BOM
+            (0xFE, 0xFF, _) => enc = UTF_16BE, //BOM
+            (0x3C, 0x00, _) => enc = UTF_16LE, //<
+            (0x00, 0x3C, _) => enc = UTF_16BE, //<
+            _ => {
+                let upto = if head.len() < 128 { head.len() } else { 128 };
+                if let Some(s) = find_raw(b"encoding=\"", &head[0..upto]) {
+                    if let Some(e) = find_raw(b"\"", &head[s + 10..upto]) {
+                        let name = &head[s + 10..s + 10 + e];
+                        enc = Encoding::for_label(name).unwrap_or(UTF_8);
+                    }
+                }
+            }
+        }
+    }
+    enc
 }
