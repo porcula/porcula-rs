@@ -48,7 +48,7 @@ impl std::fmt::Display for ParserError {
 }
 
 pub type ParserResult = std::result::Result<Book, ParserError>;
-pub type RenderResult = std::result::Result<Vec<u8>, String>;
+pub type RenderResult = std::result::Result<(String, String), String>; //(title,content)
 
 pub trait BookFormat: Send + Sync {
     fn file_extension(&self) -> &'static str;

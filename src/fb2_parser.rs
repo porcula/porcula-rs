@@ -16,7 +16,7 @@ enum ParentNode {
     SrcTitleInfo,
 }
 
-enum XMode<'a> {
+enum XMode {
     Start,
     Body(ParentNode),
     TitleInfo,
@@ -25,7 +25,7 @@ enum XMode<'a> {
     Author(ParentNode),
     Translator,
     Annotation(ParentNode),
-    Binary(Cow<'a, [u8]>, Cow<'a, [u8]>), // (id,content-type)
+    Binary(Vec<u8>, Vec<u8>), // (id,content-type)
 }
 
 fn get_attr_raw<'a>(name: &[u8], attrs: &'a mut Attributes) -> Option<Attribute<'a>> {
@@ -166,7 +166,7 @@ impl BookFormat for Fb2BookFormat {
                                                     None => b"image/jpeg".to_vec(),
                                                 };
                                                 mode =
-                                                    XMode::Binary(Cow::Owned(id), Cow::Owned(ct));
+                                                    XMode::Binary(id, ct);
                                             }
                                             _ => (),
                                         }
@@ -515,24 +515,26 @@ impl BookFormat for Fb2BookFormat {
         let encoding = detect_xml_encoding(raw);
         let (xml_str, _enc, _malformed) = encoding.decode(raw);
         let mut xml = quick_xml::Reader::from_reader(xml_str.as_ref().as_bytes());
-        let mut writer = quick_xml::Writer::new(std::io::Cursor::new(Vec::new()));
-        let mut res = Vec::<Event>::new();
         xml.expand_empty_elements(true); //for compatibility with HTML4 <tag/> -> <tag></tag>
+        let mut res = Vec::<Event>::new(); //generaged sequence of xhtml events
         let mut mode = XMode::Start;
-        let mut img = HashMap::<Cow<[u8]>, (Cow<[u8]>, Cow<[u8]>)>::new(); //image-id -> (content-type,base64-data)
+        let mut in_book_title: bool = false;
+        let mut title = String::new();
+        let mut img = HashMap::<Vec<u8>, (Vec<u8>, Vec<u8>)>::new(); //image-id -> (content-type,base64-data)
         let mut description_start: usize = 0;
         let mut description_end: usize = 0;
 
         //phase 1: collect XML events from [ title-info (annotation+cover), bodies, binaries ]
-        //doing mapping to HTML tags
+        //map XML tag to HTML tag
+        //extract book title
         loop {
             mode = match xml.read_event() {
                 Err(_) => mode, //ignore xml error
                 Ok(Event::Eof) => break,
                 Ok(Event::Start(e)) => {
-                    let tag = e.local_name();
+                    let this_tag = e.local_name();
                     match mode {
-                        XMode::Start => match tag.as_ref() {
+                        XMode::Start => match this_tag.as_ref() {
                             b"body" => {
                                 // -> <div class="body" id="..">
                                 let mut attrs = vec![Attribute::from(("class", "body"))];
@@ -559,14 +561,14 @@ impl BookFormat for Fb2BookFormat {
                                     let ct = get_attr_raw(b"content-type", &mut e.attributes())
                                         .map(|a| a.value.to_vec())
                                         .unwrap_or_else(|| b"".to_vec());
-                                    XMode::Binary(Cow::Owned(id), Cow::Owned(ct))
+                                    XMode::Binary(id, ct)
                                 } else {
                                     mode
                                 }
                             }
                             _ => mode,
                         },
-                        XMode::TitleInfo => match e.local_name().as_ref() {
+                        XMode::TitleInfo => match this_tag.as_ref() {
                             b"annotation" => XMode::Annotation(ParentNode::TitleInfo),
                             b"image" => {
                                 if let Some(a) = get_attr_raw(b"href", &mut e.attributes()) {
@@ -587,9 +589,13 @@ impl BookFormat for Fb2BookFormat {
                                     mode
                                 }
                             }
+                            b"book-title" => { 
+                                in_book_title = true; 
+                                mode 
+                            }
                             _ => mode,
                         },
-                        XMode::Annotation(_) | XMode::Body(_) => match tag.as_ref() {
+                        XMode::Annotation(_) | XMode::Body(_) => match this_tag.as_ref() {
                             b"p" | b"strong" | b"sup" | b"sub" | b"table" | b"tr" | b"th"
                             | b"td" => {
                                 res.push(Event::Start(e.to_owned())); //keep as is
@@ -603,7 +609,7 @@ impl BookFormat for Fb2BookFormat {
                                 //remove namespace from href="ns:xxx"
                                 if let Some(a) = get_attr_raw(b"href", &mut e.attributes()) {
                                     let mut href = a.value.to_vec();
-                                    if tag.as_ref() == b"image"
+                                    if this_tag.as_ref() == b"image"
                                         && !href.is_empty()
                                         && href[0] == b'#'
                                     {
@@ -615,7 +621,7 @@ impl BookFormat for Fb2BookFormat {
                                     }];
                                     let new_tag = Event::Start(
                                         BytesStart::new(
-                                            String::from_utf8_lossy(tag.as_ref()).into_owned(),
+                                            String::from_utf8_lossy(this_tag.as_ref()).into_owned(),
                                         )
                                         .with_attributes(attrs),
                                     );
@@ -649,6 +655,7 @@ impl BookFormat for Fb2BookFormat {
                 }
                 Ok(Event::End(e)) => {
                     let tag = e.local_name();
+                    in_book_title = false;
                     match mode {
                         XMode::Start if tag.as_ref() == b"description" => {
                             description_end = xml.buffer_position();
@@ -691,10 +698,14 @@ impl BookFormat for Fb2BookFormat {
                     }
                 }
                 Ok(Event::Text(e)) => match mode {
-                    XMode::Binary(ref id, ref ct) => {
-                        let b64 = e.into_inner().to_owned();
-                        img.insert(id.clone(), (ct.clone(), b64));
+                    XMode::TitleInfo if in_book_title => {
+                        title = e.unescape().unwrap().into_owned();
                         mode
+                    }
+                    XMode::Binary(id, ct) => {
+                        let b64 = e.into_inner().into_owned();
+                        img.insert(id, (ct, b64));
+                        XMode::Start
                     }
                     XMode::Annotation(_) | XMode::Body(_) => {
                         res.push(Event::Text(e.to_owned()));
@@ -751,12 +762,14 @@ impl BookFormat for Fb2BookFormat {
         res.push(Event::End(BytesEnd::new("div"))); //</description>
 
         //phase 3: construct HTML, inline image content
+        let mut writer = quick_xml::Writer::new(std::io::Cursor::new(Vec::new()));
         for event in res {
             match event {
                 Event::Start(ref e) => {
                     if e.local_name().as_ref() == b"image" {
                         if let Some(href) = get_attr_raw(b"href", &mut e.attributes()) {
-                            if let Some((ct, data)) = img.get(&href.value) {
+                            let id = href.value.to_vec();
+                            if let Some((ct, data)) = img.get(&id) {
                                 let mut src = b"data:".to_vec();
                                 src.extend_from_slice(ct); //content-type
                                 src.extend_from_slice(b" ;base64, ");
@@ -783,8 +796,9 @@ impl BookFormat for Fb2BookFormat {
             }
         }
 
-        let result = writer.into_inner().into_inner();
-        Ok(result)
+        let content = writer.into_inner().into_inner();
+        let content = String::from_utf8(content).unwrap();
+        Ok((title,content))
     }
 }
 

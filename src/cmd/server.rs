@@ -230,7 +230,7 @@ fn handler_cover(_req: &Request, fts: &BookReader, zipfile: &str, filename: &str
 
 fn handler_render(
     _req: &Request,
-    fts: &BookReader,
+    _fts: &BookReader,
     app: &Application,
     zipfile: &str,
     filename: &str,
@@ -238,17 +238,13 @@ fn handler_render(
     let ext = file_extension(filename);
     match app.book_formats.get(&ext.as_ref()) {
         Some(book_format) => {
-            let (title, _enc) = match fts.get_book_info(zipfile, filename).unwrap() {
-                Some(x) => x,
-                None => (filename.to_string(), "UTF-8".to_string()), //book not indexed yet, try defaults
-            };
             let raw = read_zipped_file(&app.books_path, zipfile, filename);
-            let content = book_format.render_to_html(&raw).unwrap(); //result is Vec<u8> but valid UTF-8
+            let (title, content) = book_format.render_to_html(&raw).unwrap(); //result is Vec<u8> but valid UTF-8
             const TEMPLATE: &str = "render.html";
             const TEMPLATE_SIZE: usize = 1000; //approximate
             let template = Path::new(DEFAULT_ASSETS_DIR).join(TEMPLATE);
-            let mut html = Vec::<u8>::with_capacity(content.len() + TEMPLATE_SIZE);
-            let mut buf: String = String::new();
+            let mut html = String::with_capacity(content.len() + title.len() + TEMPLATE_SIZE);
+            let mut buf = String::new();
             //read template from static file or load internal asset
             let tmpl: &str = if let Ok(mut f) = std::fs::File::open(template) {
                 f.read_to_string(&mut buf).unwrap();
@@ -262,17 +258,17 @@ fn handler_render(
             let mut start = 0;
             let substr = "{title}";
             if let Some(found) = tmpl.find(substr) {
-                html.extend_from_slice(tmpl[start..found].as_bytes());
-                html.extend_from_slice(title.as_bytes());
+                html.push_str(&tmpl[start..found]);
+                html.push_str(&title);
                 start = found + substr.len();
             }
             let substr = "{content}";
             if let Some(found) = tmpl.find(substr) {
-                html.extend_from_slice(tmpl[start..found].as_bytes());
-                html.extend_from_slice(&content);
+                html.push_str(&tmpl[start..found]);
+                html.push_str(&content);
                 start = found + substr.len();
             }
-            html.extend_from_slice(tmpl[start..].as_bytes());
+            html.push_str(&tmpl[start..]);
             Response::from_data("text/html", html).with_public_cache(CACHE_IMMUTABLE)
         }
         None => Response::empty_404(),

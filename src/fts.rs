@@ -149,7 +149,7 @@ impl Fields {
             cover_image: schema_builder.add_text_field("cover_image", STORED),
             xtitle: schema_builder.add_text_field("xtitle", nonstored_stemmed_text_opts.clone()),
             xannotation: schema_builder.add_text_field("xannotation", nonstored_stemmed_text_opts),
-            sort_title: schema_builder.add_u64_field("sort_title", FAST | STORED),
+            sort_title: schema_builder.add_u64_field("sort_title", FAST),
             sort_author: schema_builder.add_u64_field("sort_author", FAST),
             sort_translator: schema_builder.add_u64_field("sort_translator", FAST),
             sort_sequence: schema_builder.add_u64_field("sort_sequence", FAST),
