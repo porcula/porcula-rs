@@ -147,7 +147,7 @@ impl BookFormat for Fb2BookFormat {
                                                 }
                                                 if cover_prob < 3 {
                                                     //search word 'cover' in id
-                                                    if let Ok(s) = str::from_utf8(&*id) {
+                                                    if let Ok(s) = str::from_utf8(&id) {
                                                         if s.to_lowercase().contains("cover") {
                                                             cover_prob = 2;
                                                         }
@@ -165,8 +165,7 @@ impl BookFormat for Fb2BookFormat {
                                                     Some(a) => a.value.to_vec(),
                                                     None => b"image/jpeg".to_vec(),
                                                 };
-                                                mode =
-                                                    XMode::Binary(id, ct);
+                                                mode = XMode::Binary(id, ct);
                                             }
                                             _ => (),
                                         }
@@ -589,9 +588,9 @@ impl BookFormat for Fb2BookFormat {
                                     mode
                                 }
                             }
-                            b"book-title" => { 
-                                in_book_title = true; 
-                                mode 
+                            b"book-title" => {
+                                in_book_title = true;
+                                mode
                             }
                             _ => mode,
                         },
@@ -743,11 +742,7 @@ impl BookFormat for Fb2BookFormat {
                     ));
                     for a in e.attributes().flatten() {
                         let v = a.decode_and_unescape_value(&xml).unwrap_or_default();
-                        let txt = format!(
-                            "{}={} ",
-                            String::from_utf8_lossy(a.key.as_ref()).to_owned(),
-                            v,
-                        );
+                        let txt = format!("{}={} ", String::from_utf8_lossy(a.key.as_ref()), v,);
                         res.push(Event::Text(BytesText::from_escaped(Cow::Owned(txt))));
                     }
                 }
@@ -798,7 +793,7 @@ impl BookFormat for Fb2BookFormat {
 
         let content = writer.into_inner().into_inner();
         let content = String::from_utf8(content).unwrap();
-        Ok((title,content))
+        Ok((title, content))
     }
 }
 

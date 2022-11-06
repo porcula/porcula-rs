@@ -396,7 +396,10 @@ pub fn run_index(args: &IndexArgs, app: Application) -> ProcessResult {
         let total = tt.elapsed().as_millis() + 1;
         let canceled = canceled.load(Ordering::SeqCst);
         if canceled {
-            info!("----{}----", tr!["INDEXING CANCELED", "ИНДЕКСАЦИЯ ПРЕРВАНА"]);
+            info!(
+                "----{}----",
+                tr!["INDEXING CANCELED", "ИНДЕКСАЦИЯ ПРЕРВАНА"]
+            );
         } else {
             info!("----{}----", tr!["INDEXING DONE", "ИНДЕКСАЦИЯ ЗАВЕРШЕНА"]);
         }

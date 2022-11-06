@@ -130,14 +130,14 @@ pub enum Command {
     Facet(FacetArgs),
 }
 
-#[derive(Eq, PartialEq, Debug, strum::Display, strum::EnumString)]
+#[derive(Eq, PartialEq, Debug, strum::Display, strum::EnumString, Clone)]
 #[strum(serialize_all = "lowercase")]
 pub enum IndexMode {
     Full,
     Delta,
 }
 
-#[derive(Eq, PartialEq, Debug, strum::Display, strum::EnumString)]
+#[derive(Eq, PartialEq, Debug, strum::Display, strum::EnumString, Clone)]
 #[strum(serialize_all = "lowercase")]
 pub enum OnOff {
     On,

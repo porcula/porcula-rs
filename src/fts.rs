@@ -310,18 +310,18 @@ impl BookWriter {
         doc.add_text(self.fields.encoding, &book.encoding);
         doc.add_u64(self.fields.length, book.length);
         if let Some(id) = &book.id {
-            doc.add_text(self.fields.id, &id);
+            doc.add_text(self.fields.id, id);
         }
         for v in &book.lang {
             if !v.is_empty() {
-                doc.add_text(self.fields.lang, &v)
+                doc.add_text(self.fields.lang, v)
             }
         }
         for (i, v) in book.title.iter().enumerate() {
             if !v.is_empty() {
-                doc.add_text(self.fields.title, &v);
+                doc.add_text(self.fields.title, v);
                 if self.use_stemmer {
-                    doc.add_text(self.fields.xtitle, &v);
+                    doc.add_text(self.fields.xtitle, v);
                 }
                 if i == 0 {
                     doc.add_u64(self.fields.sort_title, crate::sort::hash_desc(v));
@@ -330,7 +330,7 @@ impl BookWriter {
         }
         for v in &book.date {
             if !v.is_empty() {
-                doc.add_text(self.fields.date, &v)
+                doc.add_text(self.fields.date, v)
             }
         }
         let mut genre_facet = vec![];
@@ -366,7 +366,7 @@ impl BookWriter {
         for (i, v) in book.author.iter().enumerate() {
             let t = &v.to_string();
             if !t.is_empty() {
-                doc.add_text(self.fields.author, &t);
+                doc.add_text(self.fields.author, t);
                 if let Some(name) = &v.last_name_normalized() {
                     let first = name.chars().take(1).collect::<String>();
                     let path = format!("/author/{}/{}", &first, name); //first letter/last name in proper case
@@ -380,7 +380,7 @@ impl BookWriter {
         for v in &book.src_author {
             let t = &v.to_string();
             if !t.is_empty() {
-                doc.add_text(self.fields.src_author, &t);
+                doc.add_text(self.fields.src_author, t);
                 if let Some(name) = &v.last_name_normalized() {
                     let first = name.chars().next().unwrap_or('?');
                     let path = format!("/author/{}/{}", &first, name); //first letter/last name in proper case
@@ -399,7 +399,7 @@ impl BookWriter {
         }
         for (i, v) in book.sequence.iter().enumerate() {
             if !v.is_empty() {
-                doc.add_text(self.fields.sequence, &v);
+                doc.add_text(self.fields.sequence, v);
                 if i == 0 {
                     doc.add_u64(self.fields.sort_sequence, crate::sort::hash_desc(v));
                 }
@@ -410,18 +410,18 @@ impl BookWriter {
         }
         if let Some(v) = &book.annotation {
             if !v.is_empty() {
-                doc.add_text(self.fields.annotation, &v);
+                doc.add_text(self.fields.annotation, v);
                 if self.use_stemmer {
-                    doc.add_text(self.fields.xannotation, &v);
+                    doc.add_text(self.fields.xannotation, v);
                 }
             }
         }
         if let Some(text) = &book.body {
             if body {
-                doc.add_text(self.fields.body, &text); //simple tokenizer
+                doc.add_text(self.fields.body, text); //simple tokenizer
             }
             if xbody && self.use_stemmer {
-                doc.add_text(self.fields.xbody, &text); //stemmed tokenizer
+                doc.add_text(self.fields.xbody, text); //stemmed tokenizer
             }
         }
         //consume book with image
