@@ -78,7 +78,9 @@ $(".find_words .word").click(function () {
 
 //enumerate paragraphs
 var para_num = 0;
+var paragraphs = []; //index for closest_para()
 $('p').each(function(){
+    paragraphs.push(this);
     if (this.id) return;
     $(this).attr('id', '_p'+(++para_num));
 });
@@ -183,15 +185,15 @@ $(".title", $("div.body").first()).each(function (i, n) {
         a.attr("id", id);
         num++;
     }
-    titles.push([L, T, id]);
+    titles.push([n, L, T, id]);
 });
 if (titles.length > 1) { //do not show empty TOC or one-line TOC
     var h = '';
     var p = -1;
     for (var i = 0; i < titles.length; i++) {
-        var L = titles[i][0] - min_lvl;
-        var T = titles[i][1];
-        var id = titles[i][2];
+        var L = titles[i][1] - min_lvl;
+        var T = titles[i][2];
+        var id = titles[i][3];
         for (var x = p; x > L; x--) { h += '</ul>'; }
         for (var x = p; x < L; x++) { h += '<ul>'; }
         h += '<li><a href="#' + id + '">' + T + '</a></li>';
@@ -204,22 +206,42 @@ else {
     $(".toc").remove();
 }
 
-//tag closest to viewport' center
-function closest_id(s) {
+//title closest to viewport' center
+function closest_title() {
     var y = window.pageYOffset + window.innerHeight/2;
-    var prev = null;
-    var id = null;
-    $(s).each(function(){
-      if (prev && this.offsetTop>y) return false;
-      prev = this;
-      id = prev.id;
-      return true;
-    });
-    return id;
+    var a = 0;
+    var b = titles.length;
+    while ((b-a)>1) {
+        var i = a+Math.floor((b-a)/2);
+        var yi = titles[i][0].offsetTop;
+        if (y<yi) { 
+            b = i;
+        } else { 
+            a = i;
+        }
+    }
+    return titles[a][3];
+}
+
+//paragraph closest to viewport' center, binary search in paragraphs array
+function closest_para() {
+    var y = window.pageYOffset + window.innerHeight/2;
+    var a = 0;
+    var b = paragraphs.length;
+    while ((b-a)>1) {
+        var i = a+Math.floor((b-a)/2);
+        var yi = paragraphs[i].offsetTop;
+        if (y<yi) { 
+            b = i;
+        } else { 
+            a = i;
+        }
+    }
+    return paragraphs[a].id;
 }
 
 function show_toc() {
-    var id = closest_id('.title');
+    var id = closest_title();
     $(".toc").show();
     $('.toc li').removeClass("current");
     //highlight closest title
@@ -302,18 +324,18 @@ for (i in state.m) {
 }
 
 function save_state() {
-    var id = closest_id('p');
+    var id = closest_para();
     if (!id) return;
     if (id==read_position) return;
     read_position = id;
     window.history.replaceState(null, "", "#" + id);
     state.d = (new Date()).toISOString();
-    state.p = closest_id('p');
+    state.p = id;
     storage.setItem('book'+book_idx, JSON.stringify(state));
 }
 
 function set_auto_bookmark() {
-    var id = closest_id('p');
+    var id = closest_para();
     if (!id) return;
     state.ab = id;
     var hash = '#'+id;
@@ -341,7 +363,7 @@ function toggle_bookmark() {
             n = n.parentNode;
         }
     }
-    if (!id) id = closest_id('p'); //paragraph in center of view
+    if (!id) id = closest_para(); //paragraph in center of view
     if (!id) return;
     var i = state.m.indexOf(id);
     if (i<0) { //add
