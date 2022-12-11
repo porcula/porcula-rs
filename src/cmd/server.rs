@@ -166,15 +166,16 @@ fn handler_search(req: &Request, fts: &BookReader) -> Response {
             let stemming = req.get_param("stemming").unwrap_or_default() == "1";
             let disjunction = req.get_param("disjunction").unwrap_or_default() == "1";
             let limit: usize = req
-                .get_param("limit")
+                .get_param("page_size")
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(DEFAULT_QUERY_HITS);
-            let offset: usize = req
-                .get_param("offset")
+            let page: usize = req
+                .get_param("page")
                 .unwrap_or_default()
                 .parse()
                 .unwrap_or(0);
+            let offset: usize = page * limit;
             let orderby = match req.get_param("order") {
                 Some(s) => crate::fts::OrderBy::from_str(&s).unwrap_or_default(),
                 None => crate::fts::OrderBy::default(),

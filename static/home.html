@@ -27,7 +27,7 @@
                     <span id="f_body" data-field="body">текст</span>
                 </span>
                 <input type="checkbox" id="stemming"><label for="stemming" title="поиск слов без учёта склонения">во всех формах слова</label>
-                <input type="checkbox" id="disjunction"><label for="disjunction" title="поиск любого из указанных слов (логическое ИЛИ)">любое слово</label>
+                <input type="checkbox" id="disjunction"><label for="disjunction" title="поиск любого из указанных слов (логическое ИЛИ)">ИЛИ</label>
                 <span>
                     <label for="page_size" class="hdiv">Строк на странице:</label>
                     <select id="page_size">
@@ -97,69 +97,125 @@
     <script src="jquery-1.12.4.min.js"></script>
     <script src="common.js"></script>
     <script>
+        'use strict';
+        var state = {
+            query: "",
+            order: "default",
+            page: 0,
+            page_size: 20,
+            stemming: 0,
+            disjunction: 0,
+        };
         var index_info = {};
         var size100pct = 5000000;
-        var page = 0;
-        var page_size = +(storage.getItem("page_size") || $("#page_size").val() || 20);
-        $("#page_size").val(page_size);
         var last_page = 0;
-        var order = "default";
         var genre_translation = {};
         var ebook = is_ebook();
 
+        //load index metadata
+        $.when(
+            $.getJSON("index/info", function (data) { index_info = data; })
+        ).then(function(){ 
+            $("#book_count").text(index_info.count);
+            if (index_info.settings.stemmer=="off") {
+                $("#stemming").attr('checked', false);
+                $("#stemming").hide();
+                $("label[for=stemming").hide();
+            }
+            if (!index_info.settings.options.annotation) {
+                $("#f_annotation").hide();
+            }
+            if (!index_info.settings.options.body) {
+                $("#f_body").hide();
+            }
+        });
+        $.when(
+            $.getJSON("genre/translation", function (data) { genre_translation = data; })
+        );
+
+        //html reload: parse URL params -> state
+         window.onload = function(e) {
+            var params = window.location.search.substring(1).split('&');
+            for(var i=0; i<params.length; i++) {
+                var p = params[i].split('=',2);
+                state[p[0]] = (p.length==1) ? '' : decodeURIComponent(p[1].replace(/\+/g, ' '));
+            }
+            state.page = parseInt(state.page, 10);
+            state.page_size = parseInt(state.page_size, 10);
+            render_state();
+        };
+        //history back/forward
+        window.onpopstate = function(e) {
+            if (e.state) {
+                state = Object.assign(state, e.state);
+                render_state();
+            }
+        };
+
+        function render_state() {
+            $("#query").val(state.query);
+            $("#page").val(state.page+1);
+            $("#page_size").val(state.page_size);
+            try {
+                $('#stemming').prop('checked',state.stemming=="1");
+                $('#disjunction').prop('checked',state.disjunction=="1");
+            } catch (e) {
+                //ignore ONYX eBook browser error: 'undefined is not a function'
+            }
+            $("#query").focus();
+            document.title = "Книги: " + state.query;
+            search(false);
+        }
+
+
         $("#search").click(function(){
-            page = 0;
+            state.page = 0;
             search();
         });
         $("#query").change(function () {
-            page = 0;
+            state.page = 0;
         });
 
         $("#page_size").change(function () {
-            page_size = +$("#page_size").val();
-            page = 0;
-            storage.setItem("page_size", page_size);
+            state.page_size = +$("#page_size").val();
+            state.page = 0;
         });
 
         $(".prev").click(go_prev_page);
         $(".next").click(function(){ go_next_page($(this).hasClass("bottom")) });
 
         function go_prev_page() {
-            page--;
-            if (page < 0) page = 0;
+            if (state.page > 0) { state.page-=1; } else { state.page = 0; }
             search(false);
         }
         function go_next_page(append) {
-            page++;
-            if (page > last_page) page = last_page;
+            if (state.page < last_page) { state.page += 1; }  else { state.page = last_page; }
             search(append);
         }
         function go_first_page() {
-            page = 0;
+            state.page = 0;
             search(false);
         }
         function go_last_page() {
-            page = last_page;
+            state.page = last_page;
             search(false);
         }
         function dec_page_size() {
-            if (page_size == 20) return;
-            var skip = page * page_size;
-            if (page_size == 100) { page_size = 20; }
-            else if (page_size == 1000) { page_size = 100; }
-            $("#page_size").val(page_size);
-            storage.setItem("page_size", page_size);
-            page = Math.trunc(skip / page_size);
+            var skip = state.page * state.page_size;
+            if (state.page_size == 20) { state.page_size = 20; }
+            else if (state.page_size == 100) { state.page_size = 20; }
+            else if (state.page_size == 1000) { state.page_size = 100; }
+            $("#page_size").val(state.page_size);
+            state.page = Math.trunc(skip / state.page_size);
             search(false);
         }
         function inc_page_size() {
-            if (page_size == 1000) return;
-            var skip = page * page_size;
-            if (page_size == 100) { page_size = 1000; }
-            else if (page_size == 20) { page_size = 100; }
-            $("#page_size").val(page_size);
-            storage.setItem("page_size", page_size);
-            page = Math.trunc(skip / page_size);
+            var skip = state.page * state.page_size;
+            if (state.page_size == 20) { state.page_size = 100; }
+            else if (state.page_size == 100) { state.page_size = 1000; }
+            else if (state.page_size == 1000) { state.page_size = 1000; }
+            $("#page_size").val(state.page_size);
+            state.page = Math.trunc(skip / state.page_size);
             search(false);
         }
 
@@ -178,7 +234,6 @@
         });
 
         function search(append) {
-            $("#page_size").val(page_size);
             $("#res_wrapper").hide();
             $("#help").hide();
             $('#limit_warning').hide();
@@ -187,22 +242,28 @@
             $("#page").text("");
             $("#total").text("");
             $(".nav .expand").removeClass("expanded");
-            var query = $("#query").val();
-            if (query == "") return;
-            var stemming = $("#stemming:checked").length;
-            var disjunction = $("#disjunction:checked").length;
+            var new_query = $("#query").val();
+            var is_query_changed = state.query != new_query;
+            state.query = new_query;
+            state.stemming = $("#stemming:checked").length;
+            state.disjunction = $("#disjunction:checked").length;
+            storage.setItem("last_query", state.query);
+            if (state.query == "") return;
             $(".order").removeClass("ordered");
-            $(".order[data-order='" + order + "']").addClass("ordered");
-            var skip = page * page_size;
-            $('#total').text("");
-            storage.setItem("last_query", query);
+            $(".order[data-order='" + state.order + "']").addClass("ordered");
+            var param = $.param(state);
             $.ajax({
-                url: "search",
-                data: { "query": query, "stemming": stemming, "disjunction": disjunction, "order": order, "limit": page_size, "offset": skip },
+                url: "search?"+param,
                 dataType: "json",
                 success: function (data) {
                     try {
-                        renderResult(data,append);
+                        render_result(data, append);
+                        if (is_query_changed) {
+                            window.history.pushState(state, "", "?" + param);
+                        } else {
+                            window.history.replaceState(state, "", "?" + param);
+                        }  
+                        document.title = "Книги: " + state.query;
                     } catch (e) {
                         $("#result").text(e.message);
                     }
@@ -217,22 +278,22 @@
             });
         }
 
-        function renderResult(data, append) {
+        function render_result(data, append) {
             if (typeof (data) == "string") data = JSON.parse(data);
             $("#res_wrapper").show();
             $(".nav").show();
             var total = data.total || 0;
-            var books_left = total - (page + 1) * page_size;
-            last_page = Math.trunc((total+page_size-1) / page_size)-1;
-            if (total>1000 && order!='default' && order!='random') $('#limit_warning').show();
+            var books_left = total - (state.page + 1) * state.page_size;
+            last_page = Math.trunc((total+state.page_size-1) / state.page_size)-1;
+            if (total>1000 && state.order!='default' && state.order!='random') $('#limit_warning').show();
             try {
-                $(".prev").prop('disabled', page <= 0);
+                $(".prev").prop('disabled', state.page <= 0);
                 $(".next").prop('disabled', books_left <= 0);
             } catch (e) {
                 //ignore ONYX eBook browser error: 'undefined is not a function'
             }
             $(".next.bottom").toggle(books_left > 0);
-            $("#page").text((total==0 ? 0 : (page + 1)) + " / " + (last_page + 1));
+            $("#page").text((total==0 ? 0 : (state.page + 1)) + " / " + (last_page + 1));
             $("#total").text(total);
             var find_words = encodeURIComponent(extract_query_words($("#query").val()));
 
@@ -342,8 +403,8 @@
         });
 
         $(".order").click(function () {
-            order = $(this).data("order");
-            page = 0;
+            state.order = $(this).data("order");
+            state.page = 0;
             search(false);
         });
 
@@ -364,8 +425,8 @@
             var v = $(this).text().replaceAll('"','');
             if (!v) return;
             $("#query").val((e.ctrlKey ? $("#query").val() + " " : "") + 'author:"' + v + '"');
-            order = "title";
-            page = 0;
+            state.order = "title";
+            state.page = 0;
             search(false);
         });
 
@@ -373,8 +434,8 @@
             var v = $(this).text().replaceAll('"','');
             if (!v) return;
             $("#query").val((e.ctrlKey ? $("#query").val() + " " : "") + 'sequence:"' + v + '"');
-            order = "sequence";
-            page = 0;
+            state.order = "sequence";
+            state.page = 0;
             search(false);
         });
 
@@ -390,7 +451,7 @@
         $("#query").keypress(function (event) {
             if (event.which == 13) {
                 event.preventDefault();
-                page = 0;
+                state.page = 0;
                 search(false);
             }
         });
@@ -461,48 +522,6 @@
             var ext = filename.match(/\.[^.]+$/);
             return safe.substring(0, 127) + ((ext && ext.length > 0) ? ext[0] : ".fb2");
         }
-
-        //parse request params
-        var qs = (function (a) {
-            if (a == "") return {};
-            var b = {};
-            for (var i = 0; i < a.length; ++i) {
-                var p = a[i].split('=', 2);
-                if (p.length == 1)
-                    b[p[0]] = "";
-                else
-                    b[p[0]] = decodeURIComponent(p[1].replace(/\+/g, " "));
-            }
-            return b;
-        })(window.location.search.substring(1).split('&'));
-        if (qs["query"] != "") {
-            $("#query").val(qs["query"]);
-        }
-        $("#query").focus();
-
-        //load data
-        $.when(
-            $.getJSON("index/info", function (data) { index_info = data; })
-        ).then(function(){ 
-            $("#book_count").text(index_info.count);
-            if (index_info.settings.stemmer=="off") {
-                $("#stemming").hide();
-                $("label[for=stemming").hide();
-            }
-            if (!index_info.settings.options.annotation) {
-                $("#f_annotation").hide();
-            }
-            if (!index_info.settings.options.body) {
-                $("#f_body").hide();
-            }
-        });
-        $.when(
-            $.getJSON("genre/translation", function (data) { genre_translation = data; })
-        ).then(function(){ 
-            if ($("#query").val() != "") {
-                search(false);
-            }
-        });
 
         $("#book_count").click(function(){
             alert(JSON.stringify(index_info));
