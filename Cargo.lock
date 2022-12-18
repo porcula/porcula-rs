@@ -1159,7 +1159,7 @@ dependencies = [
 
 [[package]]
 name = "porcula"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "atom_syndication",
  "base64",

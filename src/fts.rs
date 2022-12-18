@@ -4,6 +4,7 @@ use rand::Rng;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::Mutex;
 use tantivy::collector::{Count, FacetCollector, TopDocs};
 use tantivy::query::{
     AllQuery, BooleanQuery, FuzzyTermQuery, Occur, Query, QueryParser, QueryParserError,
@@ -14,9 +15,10 @@ use tantivy::schema::{
     TextOptions, Value, FAST, INDEXED, STORED, STRING,
 };
 use tantivy::tokenizer;
-use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, Searcher, TantivyError};
+use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, TantivyError};
 
 use crate::letter_replacer::LetterReplacer;
+use crate::mtime_checker::MtimeChecker;
 use crate::sort::LocalString;
 
 const MAX_MATCHES_BEFORE_ORDERING: usize = 10000;
@@ -112,6 +114,7 @@ pub struct BookReader {
     def_fields_no_stem: Vec<Field>,
     def_fields_stem: Vec<Field>,
     stemmed_field_for: HashMap<String, String>, //non-stemmed-field name -> stemmed-field name
+    commit_checker: Mutex<MtimeChecker>,        //for index reload
 }
 
 impl Fields {
@@ -504,7 +507,7 @@ fn parse_fuzzy_pattern(pat: &str) -> (String, u8) {
 
 impl BookReader {
     pub fn new<P: AsRef<Path>>(index_dir: P, lang: &str) -> Result<BookReader> {
-        let index = Index::open_in_dir(index_dir)?;
+        let index = Index::open_in_dir(index_dir.as_ref())?;
         let tokenizers = index.tokenizers();
         tokenizers.register(SIMPLE_TOKENIZER_NAME, get_simple_tokenizer());
         tokenizers.register(STEMMED_TOKENIZER_NAME, get_stemmed_tokenizer(lang));
@@ -512,7 +515,7 @@ impl BookReader {
         let fields = Fields::load(&schema)?;
         let reader = index
             .reader_builder()
-            .reload_policy(ReloadPolicy::OnCommit)
+            .reload_policy(ReloadPolicy::Manual)
             .try_into()?;
         let def_fields_no_stem: Vec<Field> = vec![
             fields.title,
@@ -539,6 +542,8 @@ impl BookReader {
         stemmed_field_for.insert("body".into(), "xbody".into());
         stemmed_field_for.insert("title".into(), "xtitle".into());
         stemmed_field_for.insert("annotation".into(), "xannotation".into());
+        let meta_path = &index_dir.as_ref().join(Path::new("meta.json")); //correspond to tantivy::core::META_FILEPATH
+        let commit_checker = Mutex::new(MtimeChecker::new(meta_path));
         Ok(BookReader {
             index,
             reader,
@@ -547,7 +552,22 @@ impl BookReader {
             def_fields_no_stem,
             def_fields_stem,
             stemmed_field_for,
+            commit_checker,
         })
+    }
+
+    ///check for index commit (change of meta.json)
+    /// default ReloadPolicy::OnCommit issues too many open/close events (each 500ms)
+    fn check_for_commit(&self) -> Result<()> {
+        if let Ok(mut cc) = self.commit_checker.lock() {
+            if cc.is_modified() {
+                self.reader.reload()
+            } else {
+                Ok(())
+            }
+        } else {
+            Ok(())
+        }
     }
 
     ///parser for search in default fields with|without stemming, with disjunction|disjunction by default
@@ -619,6 +639,7 @@ impl BookReader {
     }
 
     pub fn count_all(&self) -> Result<usize> {
+        self.check_for_commit()?;
         let searcher = self.reader.searcher();
         let cnt = searcher.search(&AllQuery, &Count)?;
         Ok(cnt)
@@ -631,6 +652,7 @@ impl BookReader {
         limit: usize,
         offset: usize,
     ) -> Result<Vec<Document>> {
+        self.check_for_commit()?;
         let searcher = self.reader.searcher();
         debug!("query={:?} orderby={}", query, orderby);
         let mut docs = Vec::new();
@@ -785,47 +807,6 @@ impl BookReader {
         Ok(matches)
     }
 
-    fn find_book(
-        &self,
-        searcher: &Searcher,
-        zipfile: &str,
-        filename: &str,
-    ) -> Result<Option<tantivy::DocAddress>> {
-        let facet_term = Term::from_facet(self.fields.facet, &file_facet(zipfile, filename));
-        let query = TermQuery::new(facet_term, IndexRecordOption::Basic);
-        let found = searcher.search(&query, &TopDocs::with_limit(1))?;
-        if !found.is_empty() {
-            Ok(Some(found[0].1))
-        } else {
-            Ok(None)
-        }
-    }
-
-    pub fn get_book_info(&self, zipfile: &str, filename: &str) -> Result<Option<(String, String)>> {
-        // (title,encoding)
-        let searcher = self.reader.searcher();
-        if let Some(doc_address) = self.find_book(&searcher, zipfile, filename)? {
-            let doc = searcher.doc(doc_address)?;
-            let title: &str = first_str(&doc, self.fields.title).unwrap_or_default();
-            let encoding: &str = first_str(&doc, self.fields.encoding).unwrap_or_default();
-            return Ok(Some((title.to_string(), encoding.to_string())));
-        }
-        Ok(None)
-    }
-
-    pub fn get_cover(&self, zipfile: &str, filename: &str) -> Result<Option<Vec<u8>>> {
-        let searcher = self.reader.searcher();
-        if let Some(doc_address) = self.find_book(&searcher, zipfile, filename)? {
-            let doc = searcher.doc(doc_address)?;
-            if let Some(base64_str) = first_string(&doc, self.fields.cover_image) {
-                if let Ok(jpeg) = base64::decode(base64_str) {
-                    return Ok(Some(jpeg));
-                }
-            }
-        }
-        Ok(None)
-    }
-
     pub fn get_facet(
         &self,
         path: &str,
@@ -834,6 +815,7 @@ impl BookReader {
         disjunction: bool,
         hits: Option<usize>,
     ) -> Result<HashMap<String, u64>> {
+        self.check_for_commit()?;
         let searcher = self.reader.searcher();
         let mut facet_collector = FacetCollector::for_field(self.fields.facet);
         facet_collector.add_facet(path);

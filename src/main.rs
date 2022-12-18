@@ -13,6 +13,7 @@ mod fts;
 mod genre_map;
 mod img_resizer;
 mod letter_replacer;
+mod mtime_checker;
 mod sort;
 mod types;
 #[macro_use]
