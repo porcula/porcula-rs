@@ -184,8 +184,8 @@ pub struct ServerArgs {
     #[clap(short, long, default_value = DEFAULT_LISTEN_ADDR, help=tr!("Listen address", "Адрес сервера"), value_name = "ADDRESS:PORT")]
     pub listen: String,
 }
-impl ServerArgs {
-    pub fn default() -> Self {
+impl Default for ServerArgs {
+    fn default() -> Self {
         ServerArgs {
             listen: DEFAULT_LISTEN_ADDR.into(),
         }

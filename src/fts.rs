@@ -924,7 +924,7 @@ impl BookReader {
                     .get_field(field_name)
                     .ok_or_else(|| QueryParserError::FieldDoesNotExist(field_name.to_string()))?;
                 let term = Term::from_field_text(field, &word);
-                let q = FuzzyTermQuery::new(term, distance as u8, true);
+                let q = FuzzyTermQuery::new(term, distance, true);
                 queries.push((Occur::Must, Box::new(q)));
             } else {
                 let mut subqueries: Vec<(Occur, Box<dyn Query>)> = vec![];

@@ -802,29 +802,26 @@ fn is_base64(x: u8) -> bool {
     x == 43 || (47..=57).contains(&x) || (65..=90).contains(&x) || (97..=122).contains(&x)
 }
 
+const BASE64_ENGINE: base64::engine::fast_portable::FastPortable =
+    base64::engine::fast_portable::FastPortable::from(
+        &base64::alphabet::STANDARD,
+        base64::engine::fast_portable::FastPortableConfig::new()
+            .with_decode_allow_trailing_bits(true)
+            .with_decode_padding_mode(base64::engine::DecodePaddingMode::Indifferent),
+    );
+
 /// base64 raw string -> (decoded raw, warning) | error
 pub fn try_decode_base64(b64: &[u8]) -> Result<(Vec<u8>, String), String> {
     let mut buf: Vec<u8>;
-    let mut warning = String::new();
+    let warning = String::new();
     let mut b64_ref = b64;
-    let config = base64::STANDARD.decode_allow_trailing_bits(true);
     //remove non-base64 chars
-    if b64.iter().any(|&x| is_base64(x)) {
+    if b64.iter().any(|&x| !is_base64(x)) {
         buf = b64.iter().filter(|&&x| is_base64(x)).copied().collect();
         b64_ref = &buf[..];
     }
-    match base64::decode_config(b64_ref, config) {
+    match base64::decode_engine(b64_ref, &BASE64_ENGINE) {
         Ok(raw) => buf = raw,
-        Err(base64::DecodeError::InvalidByte(offset, _)) => {
-            let upto = offset - offset % 4; //align to 4-byte chunk and retry decoding
-            match base64::decode_config(&b64_ref[0..upto], config) {
-                Ok(raw) => {
-                    warning = format!("Image truncated, invalid byte at {}", offset);
-                    buf = raw;
-                }
-                Err(e) => return Err(format!("Invalid image: {}", e)),
-            }
-        }
         Err(e) => return Err(format!("Invalid image: {}", e)),
     }
     Ok((buf, warning))

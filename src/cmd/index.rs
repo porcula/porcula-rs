@@ -301,7 +301,7 @@ pub fn run_index(args: &IndexArgs, app: Application) -> ProcessResult {
                 tr!["read archive", "читаем архив"],
                 &zipfile
             );
-            let reader = std::fs::File::open(&entry.path()).unwrap();
+            let reader = std::fs::File::open(entry.path()).unwrap();
             let zip = zip::ZipArchive::new(reader).unwrap();
             let file_count = zip.len();
             let part_size = file_count / args.read_threads;
@@ -319,7 +319,7 @@ pub fn run_index(args: &IndexArgs, app: Application) -> ProcessResult {
             let zip_stats: ProcessStats = partitions
                 .into_par_iter()
                 .map(|(first, last)| {
-                    let reader = std::fs::File::open(&entry.path()).unwrap();
+                    let reader = std::fs::File::open(entry.path()).unwrap();
                     let mut zip = zip::ZipArchive::new(reader).unwrap();
                     let mut stats = ProcessStats::default();
                     for i in first..last {
