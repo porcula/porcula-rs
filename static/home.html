@@ -243,6 +243,7 @@
             $("#total").text("");
             $(".nav .expand").removeClass("expanded");
             var new_query = $("#query").val();
+            new_query = new_query.replaceAll(/[«»“”‘’]/g,'"');
             var is_query_changed = state.query != new_query;
             state.query = new_query;
             state.stemming = $("#stemming:checked").length;
