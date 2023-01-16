@@ -41,18 +41,18 @@
         <div id="help" style="display:none">
             Синтаксис запросов:
             <ul class="itemizedlist" type="disc">
-                <li class="listitem"><p>оператор И (=нет галки "любое слово"): </p><pre class="programlisting">hello AND world</pre></li>
-                <li class="listitem"><p>оператор ИЛИ (=есть галка "любое слово"): </p><pre class="programlisting">hello OR world</pre></li>
-                <li class="listitem"><p>оператор НЕ:</p><pre class="programlisting">hello -title:world</pre></li>
                 <li class="listitem"><p>поиск по полям: </p><pre class="programlisting">title:hello AND body:world</pre></li>
+                <li class="listitem"><p>оператор И (=нет галки "ИЛИ"): </p><pre class="programlisting">hello AND world</pre></li>
+                <li class="listitem"><p>оператор ИЛИ (=есть галка "ИЛИ"): </p><pre class="programlisting">hello OR world</pre></li>
+                <li class="listitem"><p>оператор НЕ:</p><pre class="programlisting">title:hello -title:world</pre></li>
                 <li class="listitem"><p>поиск фразы: </p><pre class="programlisting">"hello world" или title:"hello world"</pre></li>
                 <li class="listitem"><p>поиск в интервале: </p><pre class="programlisting">title:[a TO c]</pre></li>
                 <li class="listitem"><p>поиск в интервале (не включая): </p><pre class="programlisting">title:{a TO c}</pre></li>
                 <li class="listitem"><p>поиск по шаблону (медленный!): </p><pre class="programlisting">title:h?ll*</pre></li>
                 <li class="listitem"><p>поиск по регулярному выражению (медленный!): </p><pre class="programlisting">title:hell.*</pre></li>
-                <li class="listitem"><p>нечёткий поиск (одна опечатка, медленно!): </p><pre class="programlisting">title:helo~ или title:hel~~</pre></li>
+                <li class="listitem"><p>нечёткий поиск (одна опечатка, медленно!): </p><pre class="programlisting">title:helo~</pre></li>
             </ul>
-            Клавиатурные сокращения при чтении:
+            Клавиатурные сокращения при чтении в браузере:
             <table class="shortcut_table">
                 <tr><td><span class="shortcut">T</span></td><td>Показать/скрыть оглавление</td></tr>
                 <tr><td><span class="shortcut">0</span></td><td>Показать/скрыть список искомых слов</td></tr>
