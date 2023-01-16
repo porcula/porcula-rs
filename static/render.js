@@ -1,7 +1,8 @@
 ﻿var words = [];
-var find_word = "";
-var find_elem;
-var find_start = 0;
+var word_count = {}; // {word} -> [id_prefix,count]
+var wc_idx = 0;
+var wc_max = 0;
+var prev_find = '';
 
 var qs = (function (a) {
     if (a == "") return {};
@@ -30,35 +31,51 @@ if (storage.getItem("hide_words")) {
 }  
 
 function do_find(w) {
-    if (find_word != w || !find_elem) {
-        find_elem = document.getRootNode();
-        find_start = 0;
+    if (prev_find!=w) {
+        wc_idx = 0;
+        prev_find = w;
     }
-    find_word = w;
-    var r = new Range();
-    r.setStart(find_elem, find_start);
-    r.setEnd(find_elem, find_start);
-    var s = document.getSelection();
-    s.empty();
-    s.addRange(r);
-    if (window.find(find_word)) {
-        s = document.getSelection();
-        r = s.getRangeAt(0);
-        find_elem = r.endContainer;
-        find_start = r.endOffset;
-        if (find_elem.parentNode.classList.contains("word")) {
-            find_elem = null;
+    var p = word_count[w];
+    if (p==undefined) {
+        var id_prefix = 'w-'+(wc_max++)+'-';
+        // allow non-letter characters (punctuation) between words
+        var re = new RegExp(w.replace(/\s+/g, '\\P{L}+'), 'giu');
+        var idx = 0;
+        $("div.body").each(function(){
+            html = this.innerHTML.replace(re, function(m) { 
+                return '<span class="word" id="'+id_prefix+(idx++)+'">'+m+'</span>';
+            });
+            if (idx>0) this.innerHTML = html;
+        });
+        word_count[w] = p = [ id_prefix, idx ];
+    }
+    if (wc_idx >= p[1]) {
+        wc_idx = 0;
+    } else {
+        var id = '#' + p[0] + wc_idx;
+        var e = $(id);
+        if (e.length) {
+            e.addClass('hl');
+            e[0].scrollIntoView({ "block": "center" });
         }
-    }
-    else {
-        find_elem = null;
+        wc_idx += 1;
     }
 }
 
-$(".find_words .hide").click(function () {
+function hide_words() {
     $('.find_words').hide();
+    $('.word.hl').removeClass('hl');
     storage.setItem('hide_words','1');
-});
+}
+
+function show_words() {
+    $('.find_words').show();
+    $('.word').addClass('hl');
+    storage.setItem('hide_words','0');
+}
+
+
+$(".find_words .hide").click(hide_words);
 $(".find_words .word").click(function () {
     do_find($(this).text());
 }).dblclick(function (e) {
@@ -464,8 +481,8 @@ window.addEventListener('keydown', function (e) {
                 goto_auto_bookmark();
             } else {
                 $('.find_words').toggle();
-                var hide_words = $('.find_words:visible').length==0 ? '1' : '';
-                storage.setItem('hide_words',hide_words);
+                var hide = $('.find_words:visible').length==0 ? '1' : '';
+                if (hide) { hide_words(); } else { show_words(); }
             }
             break;
         case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4': case 'Digit5': case 'Digit6': case 'Digit7': case 'Digit8': case 'Digit9':

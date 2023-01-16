@@ -162,6 +162,7 @@ p {
     position: absolute;
     right: 0;
 }
+span.word.hl { background-color: #ff7; color: #2c2c2c; }
 
 .backlink, .backlink:visited {
     color: #2c2c2c;
