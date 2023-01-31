@@ -62,7 +62,7 @@ fn format_xml_error<T: std::fmt::Debug>(error: T, reader: &Reader<&[u8]>) -> Str
             column += 1;
         }
     }
-    format!("Error at position {},{}: {:?}", line, column, error)
+    format!("Error at position {line},{column}: {error:?}")
 }
 
 impl BookFormat for Fb2BookFormat {
@@ -822,7 +822,7 @@ pub fn try_decode_base64(b64: &[u8]) -> Result<(Vec<u8>, String), String> {
     }
     match base64::decode_engine(b64_ref, &BASE64_ENGINE) {
         Ok(raw) => buf = raw,
-        Err(e) => return Err(format!("Invalid image: {}", e)),
+        Err(e) => return Err(format!("Invalid image: {e}")),
     }
     Ok((buf, warning))
 }
@@ -833,7 +833,7 @@ fn find_raw(needle: &[u8], haystack: &[u8]) -> Option<usize> {
         .position(|window| window == needle)
 }
 
-fn detect_xml_encoding<'a>(head: &'a [u8]) -> &'static Encoding {
+fn detect_xml_encoding(head: &[u8]) -> &'static Encoding {
     let mut enc: &Encoding = UTF_8;
     if head.len() > 3 {
         match (head[0], head[1], head[2]) {

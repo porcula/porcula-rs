@@ -14,7 +14,7 @@ pub fn run_query(args: &QueryArgs, app: Application) -> ProcessResult {
         0,
     ) {
         Ok(res) => {
-            println!("{}", res);
+            println!("{res}");
             ProcessResult::Ok
         }
         Err(e) => ProcessResult::QueryError(e.to_string()),

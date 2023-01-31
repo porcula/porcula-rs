@@ -95,7 +95,7 @@ pub fn run_server(args: &ServerArgs, app: Application) -> ProcessResult {
             (GET) (/opds/search/{query: String}) => { opds_search_where(req, &query) },
             (GET) (/opds/search/{query: String}/) => { opds_search_where(req, &query) },
             (GET) (/opds/search/{field: String}/{query: String}/{page: usize}) => {
-                let query = format!("{}:{}", field, query);
+                let query = format!("{field}:{query}");
                 let order = match field.as_str() {
                     "sequence" => "sequence",
                     _ => "default"
@@ -105,13 +105,13 @@ pub fn run_server(args: &ServerArgs, app: Application) -> ProcessResult {
             (GET) (/opds/author) => { opds_facet(req, "author", None, "Авторы", None, &fts) },
             (GET) (/opds/author/{prefix: String}) => { opds_facet(req, "author", Some(&prefix), "Авторы", None, &fts) },
             (GET) (/opds/author/{prefix: String}/{name: String}/{page: usize}) => {
-                let query = format!("facet:/author/{}/{}", prefix, name);
+                let query = format!("facet:/author/{prefix}/{name}");
                 opds_search_books(req, &query, "title", page, &genre_map.translation, &fts)
             },
             (GET) (/opds/genre) => { opds_facet(req, "genre", None, "Жанры", Some(&genre_map.translation), &fts) },
             (GET) (/opds/genre/{prefix: String}) => { opds_facet(req, "genre", Some(&prefix), "Жанры", Some(&genre_map.translation), &fts) },
             (GET) (/opds/genre/{cat: String}/{code: String}/{page: usize}) => {
-                let query = format!("facet:/genre/{}/{}", cat, code);
+                let query = format!("facet:/genre/{cat}/{code}");
                 opds_search_books(req, &query, "title", page, &genre_map.translation, &fts)
             },
             _ =>  Response::empty_404() ,
@@ -138,7 +138,7 @@ fn root_url(req: &Request) -> String {
             }
         }
     };
-    format!("{}://{}", proto, host)
+    format!("{proto}://{host}")
 }
 
 // Request -> ("http://server:port", "/prefix/path")
@@ -319,7 +319,7 @@ fn opds_response(
     prev_url: Option<String>,
     next_url: Option<String>,
 ) -> Response {
-    let abs_url = format!("{}/porcula{}", root, path);
+    let abs_url = format!("{root}/porcula{path}",);
     let mut ns = BTreeMap::<String, String>::new();
     ns.insert("dcterms".into(), "http://purl.org/dc/terms".into());
 
@@ -382,7 +382,7 @@ fn opds_root(req: &Request, fts: &BookReader) -> Response {
 
     let links = vec![
         LinkBuilder::default()
-            .href(format!("{}/porcula/opds/author", root_url))
+            .href(format!("{root_url}/porcula/opds/author"))
             .rel("alternate".to_string())
             .build(),
         LinkBuilder::default()
@@ -407,7 +407,7 @@ fn opds_root(req: &Request, fts: &BookReader) -> Response {
 
     let links = vec![
         LinkBuilder::default()
-            .href(format!("{}/porcula/opds/genre", root_url))
+            .href(format!("{root_url}/porcula/opds/genre"))
             .rel("alternate".to_string())
             .build(),
         LinkBuilder::default()
@@ -424,7 +424,7 @@ fn opds_root(req: &Request, fts: &BookReader) -> Response {
             .links(links)
             .content(Some(
                 ContentBuilder::default()
-                    .value(Some(format!("{}: {}", tr!["Books", "Книг"], book_count)))
+                    .value(Some(format!("{}: {book_count}", tr!["Books", "Книг"])))
                     .build(),
             ))
             .build(),
@@ -545,8 +545,8 @@ fn opds_facet(
 ) -> Response {
     let (root_url, req_path) = split_request_url(req);
     let path = match prefix {
-        Some(x) => format!("/{}/{}", facet, x),
-        None => format!("/{}", facet),
+        Some(x) => format!("/{facet}/{x}"),
+        None => format!("/{facet}"),
     };
     match fts.get_facet(&path, None, false, false, None) {
         Ok(data) => {

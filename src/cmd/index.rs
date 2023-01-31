@@ -493,7 +493,7 @@ fn format_duration(ms: u128) -> String {
     s -= h * 60 * 60;
     let m = s / 60;
     s -= m * 60;
-    format!("{:02}:{:02}:{:02}", h, m, s)
+    format!("{h:02}:{m:02}:{s:02}")
 }
 
 fn decode_filename(raw_filename: &[u8]) -> Option<String> {

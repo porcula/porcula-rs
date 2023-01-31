@@ -74,7 +74,7 @@ impl GenreMap {
             .get(primary)
             .map(|x| x.as_str())
             .unwrap_or("misc");
-        format!("{}/{}", cat, primary)
+        format!("{cat}/{primary}")
     }
 
     pub fn translate(&self, code: &str) -> String {

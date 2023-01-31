@@ -42,7 +42,7 @@ impl std::fmt::Display for ParserError {
         match self {
             ParserError::EmptyBody => write!(f, "Empty body"),
             ParserError::EmptyTitle => write!(f, "Empty title"),
-            ParserError::Decoding(s) => write!(f, "Decoding error {}", s),
+            ParserError::Decoding(s) => write!(f, "Decoding error {s}"),
         }
     }
 }
@@ -82,7 +82,7 @@ impl Display for Book {
             .sequence
             .iter()
             .zip(self.seqnum.iter())
-            .map(|(name, num)| format!("{}-{}", name, num))
+            .map(|(name, num)| format!("{name}-{num}"))
             .collect();
         write!(f, "enc={} lang={} len={} title={} date={} genre={} author={} src.author={} trans={} seq={} keyword={} ann.len={} img.len={} warn={}", 
            &self.encoding, &self.lang.join(" / "), self.length, &self.title.join(" / "), 
@@ -144,7 +144,7 @@ impl std::fmt::Display for Person {
                 r.push(']');
             }
         }
-        write!(f, "{}", r)
+        write!(f, "{r}")
     }
 }
 

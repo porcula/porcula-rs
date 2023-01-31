@@ -163,7 +163,7 @@ impl Fields {
         let load_field = |name: &str| {
             schema
                 .get_field(name)
-                .ok_or_else(|| TantivyError::SchemaError(format!("field not found: {}", name)))
+                .ok_or_else(|| TantivyError::SchemaError(format!("field not found: {name}")))
         };
         Ok(Fields {
             facet: load_field("facet")?,
@@ -194,7 +194,7 @@ impl Fields {
 }
 
 fn file_facet(zipfile: &str, filename: &str) -> Facet {
-    let path: String = format!("/file/{}/{}", zipfile, filename);
+    let path: String = format!("/file/{zipfile}/{filename}");
     Facet::from_text(&path).unwrap()
 }
 
@@ -280,7 +280,7 @@ impl BookWriter {
 
     pub fn debug_merge_policy(&self) -> String {
         let mp = self.writer.get_merge_policy();
-        format!("{:?}", mp)
+        format!("{mp:?}")
     }
 
     pub fn delete_all_books(&mut self) -> Result<()> {
@@ -361,7 +361,7 @@ impl BookWriter {
         keyword.dedup();
         for v in keyword {
             if !v.is_empty() {
-                let path = format!("/kw/{}", v);
+                let path = format!("/kw/{v}");
                 doc.add_facet(self.fields.facet, &path);
                 doc.add_text(self.fields.keyword, &v);
             }
@@ -872,7 +872,7 @@ impl BookReader {
                             let field_name = m.get(1).unwrap().as_str();
                             let query = m.get(2).unwrap().as_str();
                             match self.stemmed_field_for.get(field_name) {
-                                Some(f) => format!("{}:{}", f, query),
+                                Some(f) => format!("{f}:{query}"),
                                 None => i.to_string(),
                             }
                         }
