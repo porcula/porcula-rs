@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose::STANDARD_NO_PAD as base64engine, Engine};
 #[allow(unused_imports)]
 use log::{debug, error};
 use rand::Rng;
@@ -429,7 +430,7 @@ impl BookWriter {
         }
         //consume book with image
         if let Some(raw) = book.cover_image {
-            doc.add_text(self.fields.cover_image, base64::encode(raw));
+            doc.add_text(self.fields.cover_image, base64engine.encode(raw));
         }
         self.writer.add_document(doc)?;
         Ok(())
