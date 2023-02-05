@@ -20,7 +20,7 @@ strip = true
 
 [dependencies]
 tantivy = { version = "0.19", features = ["mmap"] }
-quick-xml = { version = "0.27", default-features = false }
+quick-xml = { version = "0.27", default-features = false, features = [] }
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
 image = { version = "0.24", default-features = false, features = ["jpeg","png","gif","bmp"] }
 rouille = { version = "3.6", default-features = false }
