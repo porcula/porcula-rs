@@ -88,7 +88,7 @@ impl BookFormat for Fb2BookFormat {
         if malformed {
             warning.push("malformed characters replaced".to_string());
         }
-        let mut xml = quick_xml::Reader::from_reader(xml_str.as_ref().as_bytes());
+        let mut xml = quick_xml::Reader::from_str(xml_str.as_ref());
         xml.trim_text(true);
         let mut mode = XMode::Start;
         let mut tag: Vec<u8> = vec![];
@@ -258,11 +258,8 @@ impl BookFormat for Fb2BookFormat {
                             }
                             b"lang" => {
                                 if let Ok(v) = e.unescape() {
-                                    let mut v = v.to_string();
-                                    if v.len() > 2 {
-                                        v = v[0..2].to_string()
-                                    } //2-letter ISO 639-1
-                                    v = v.to_lowercase();
+                                    //suppose 2-letter language code ISO 639-1
+                                    let v = v.chars().take(2).collect::<String>().to_lowercase();
                                     lang.push(v);
                                 }
                             }
@@ -514,7 +511,7 @@ impl BookFormat for Fb2BookFormat {
     fn render_to_html(&self, raw: &[u8]) -> RenderResult {
         let encoding = detect_xml_encoding(raw);
         let (xml_str, _enc, _malformed) = encoding.decode(raw);
-        let mut xml = quick_xml::Reader::from_reader(xml_str.as_ref().as_bytes());
+        let mut xml = quick_xml::Reader::from_str(xml_str.as_ref());
         xml.expand_empty_elements(true); //for compatibility with HTML4 <tag/> -> <tag></tag>
         let mut res = Vec::<Event>::new(); //generaged sequence of xhtml events
         let mut mode = XMode::Start;
