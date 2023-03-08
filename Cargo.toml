@@ -1,6 +1,6 @@
 [package]
 name = "porcula"
-version = "0.5.5"
+version = "0.5.6"
 authors = ["alexey.s.v.br@gmail.com"]
 edition = "2018"
 publish = false
@@ -22,7 +22,7 @@ strip = true
 tantivy = { version = "0.19", features = ["mmap"] }
 quick-xml = { version = "0.27", default-features = false, features = [] }
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
-image = { version = "0.24", default-features = false, features = ["jpeg","png","gif","bmp"] }
+image = { version = "0.24", default-features = false, features = ["jpeg","png","gif","bmp","webp"] }
 rouille = { version = "3.6", default-features = false }
 atom_syndication = "0.12"
 base64 = "0.21"
