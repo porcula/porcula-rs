@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::Mutex;
 use tantivy::collector::{Count, FacetCollector, TopDocs};
 use tantivy::query::{
-    AllQuery, BooleanQuery, FuzzyTermQuery, Occur, Query, QueryParser, QueryParserError,
+    AllQuery, BooleanQuery, FuzzyTermQuery, Occur, Query, QueryParser,
     RegexQuery, TermQuery,
 };
 use tantivy::schema::{
@@ -164,7 +164,7 @@ impl Fields {
         let load_field = |name: &str| {
             schema
                 .get_field(name)
-                .ok_or_else(|| TantivyError::SchemaError(format!("field not found: {name}")))
+                .map_err(|e| TantivyError::SchemaError(format!("field error: {name}, {e}")))
         };
         Ok(Fields {
             facet: load_field("facet")?,
@@ -200,10 +200,11 @@ fn file_facet(zipfile: &str, filename: &str) -> Facet {
 }
 
 fn get_simple_tokenizer() -> tokenizer::TextAnalyzer {
-    tokenizer::TextAnalyzer::from(tokenizer::SimpleTokenizer)
+    tokenizer::TextAnalyzer::builder(tokenizer::SimpleTokenizer::default())
         .filter(tokenizer::RemoveLongFilter::limit(40))
         .filter(tokenizer::LowerCaser)
         .filter(LetterReplacer)
+        .build()
 }
 
 fn get_stemmed_tokenizer(stemmer: &str) -> tokenizer::TextAnalyzer {
@@ -232,11 +233,12 @@ fn get_stemmed_tokenizer(stemmer: &str) -> tokenizer::TextAnalyzer {
                 .unwrap()
         }
     };
-    tokenizer::TextAnalyzer::from(tokenizer::SimpleTokenizer)
+    tokenizer::TextAnalyzer::builder(tokenizer::SimpleTokenizer::default())
         .filter(tokenizer::RemoveLongFilter::limit(40))
         .filter(tokenizer::LowerCaser)
         .filter(LetterReplacer)
         .filter(tokenizer::Stemmer::new(language))
+        .build()
 }
 
 impl BookWriter {
@@ -595,7 +597,7 @@ impl BookReader {
         let searcher = self.reader.searcher();
         if let IndexListDetails::Compact = compact {
             //collect whole zipfiles
-            let mut facet_collector = FacetCollector::for_field(self.fields.facet);
+            let mut facet_collector = FacetCollector::for_field("facet");
             let whole_facet = Facet::from_path(vec![WHOLE_MARKER]);
             facet_collector.add_facet(whole_facet.clone());
             let facet_counts = searcher.search(&AllQuery, &facet_collector)?;
@@ -608,7 +610,7 @@ impl BookReader {
             }
         }
         //collect files
-        let mut facet_collector = FacetCollector::for_field(self.fields.facet);
+        let mut facet_collector = FacetCollector::for_field("facet");
         let root_facet = Facet::from_path(vec!["file"]);
         facet_collector.add_facet(root_facet.clone());
         let facet_counts = searcher.search(&AllQuery, &facet_collector)?;
@@ -624,7 +626,7 @@ impl BookReader {
             let mut hs = HashSet::new();
             let term = Term::from_facet(self.fields.facet, zip_facet);
             let query = TermQuery::new(term, IndexRecordOption::Basic);
-            let mut facet_collector = FacetCollector::for_field(self.fields.facet);
+            let mut facet_collector = FacetCollector::for_field("facet");
             facet_collector.add_facet(zip_facet.clone());
             let facet_counts = searcher.search(&query, &facet_collector)?;
             for (file_facet, _) in facet_counts.get(zip_facet.clone()) {
@@ -687,10 +689,10 @@ impl BookReader {
                 //then reorder list by exact sort routine
                 //it is fast, but may cause some discrepancy between pages
                 let sort_field = match orderby {
-                    OrderBy::Author => self.fields.sort_author,
-                    OrderBy::Translator => self.fields.sort_translator,
-                    OrderBy::Sequence => self.fields.sort_sequence,
-                    _ => self.fields.sort_title,
+                    OrderBy::Author => "sort_author",
+                    OrderBy::Translator => "sort_translator",
+                    OrderBy::Sequence => "sort_sequence",
+                    _ => "sort_title",
                 };
                 let collector = TopDocs::with_limit(limit + offset).order_by_u64_field(sort_field);
                 docs = searcher
@@ -818,7 +820,7 @@ impl BookReader {
     ) -> Result<HashMap<String, u64>> {
         self.check_for_commit()?;
         let searcher = self.reader.searcher();
-        let mut facet_collector = FacetCollector::for_field(self.fields.facet);
+        let mut facet_collector = FacetCollector::for_field("facet");
         facet_collector.add_facet(path);
         let query = match query {
             Some(q) => self.parse_query(q, stemming, disjunction)?,
@@ -900,8 +902,7 @@ impl BookReader {
                 let regex = m.get(2).unwrap().as_str();
                 let field = self
                     .schema
-                    .get_field(field_name)
-                    .ok_or_else(|| QueryParserError::FieldDoesNotExist(field_name.to_string()))?;
+                    .get_field(field_name)?;
                 let q = RegexQuery::from_pattern(regex, field)?;
                 queries.push((Occur::Must, Box::new(q)));
             } else {
@@ -922,8 +923,7 @@ impl BookReader {
                 let (word, distance) = parse_fuzzy_pattern(pat);
                 let field = self
                     .schema
-                    .get_field(field_name)
-                    .ok_or_else(|| QueryParserError::FieldDoesNotExist(field_name.to_string()))?;
+                    .get_field(field_name)?;
                 let term = Term::from_field_text(field, &word);
                 let q = FuzzyTermQuery::new(term, distance, true);
                 queries.push((Occur::Must, Box::new(q)));

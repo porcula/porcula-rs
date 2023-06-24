@@ -1,20 +1,43 @@
 use std::mem;
-use tantivy::tokenizer::{BoxTokenStream, Token, TokenFilter, TokenStream};
-
-impl TokenFilter for LetterReplacer {
-    fn transform<'a>(&self, token_stream: BoxTokenStream<'a>) -> BoxTokenStream<'a> {
-        BoxTokenStream::from(LetterReplacerTokenStream { tail: token_stream })
-    }
-}
+use tantivy::tokenizer::{Tokenizer, Token, TokenFilter, TokenStream};
 
 #[derive(Clone)]
 pub struct LetterReplacer;
 
-pub struct LetterReplacerTokenStream<'a> {
-    tail: BoxTokenStream<'a>,
+impl TokenFilter for LetterReplacer {
+    type Tokenizer<T: Tokenizer> = LetterReplacerFilter<T>;
+
+    fn transform<T: Tokenizer>(self, tokenizer: T) -> Self::Tokenizer<T> {
+        LetterReplacerFilter {
+            tokenizer,
+            buffer: String::new(),
+        }
+    }
 }
 
-impl<'a> TokenStream for LetterReplacerTokenStream<'a> {
+#[derive(Clone)]
+pub struct LetterReplacerFilter<T> {
+    tokenizer: T,
+    buffer: String,
+}
+
+impl<T: Tokenizer> Tokenizer for LetterReplacerFilter<T> {
+    type TokenStream<'a> = LetterReplacerTokenStream<T::TokenStream<'a>>;
+
+    fn token_stream<'a>(&'a mut self, text: &'a str) -> Self::TokenStream<'a> {
+        self.buffer.clear();
+        LetterReplacerTokenStream {
+            tail: self.tokenizer.token_stream(text),
+        }
+    }
+}
+
+
+pub struct LetterReplacerTokenStream<T> {
+    tail: T,
+}
+
+impl<T: TokenStream> TokenStream for LetterReplacerTokenStream<T> {
     fn advance(&mut self) -> bool {
         if !self.tail.advance() {
             return false;
@@ -59,9 +82,10 @@ mod tests {
 
     fn replace_helper(text: &str) -> Vec<String> {
         let mut tokens = vec![];
-        let mut token_stream = TextAnalyzer::from(SimpleTokenizer)
+        let mut tokenizer = TextAnalyzer::builder(SimpleTokenizer::default())
             .filter(crate::letter_replacer::LetterReplacer)
-            .token_stream(text);
+            .build();
+        let mut token_stream = tokenizer.token_stream(text);
         while token_stream.advance() {
             let token_text = token_stream.token().text.clone();
             tokens.push(token_text);
