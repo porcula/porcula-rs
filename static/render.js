@@ -1,65 +1,80 @@
-﻿var words = [];
-var word_count = {}; // {word} -> [id_prefix,count]
-var wc_idx = 0;
-var wc_max = 0;
-var prev_find = '';
+﻿let words = []; // [{word:String, count:Number, pos:Number}]
+let last_word_index = -1;
+const params = new URLSearchParams(window.location.search);
 
-var qs = (function (a) {
-    if (a == "") return {};
-    var b = {};
-    for (var i = 0; i < a.length; ++i) {
-        var p = a[i].split('=', 2);
-        if (p.length == 1)
-            b[p[0]] = "";
-        else
-            b[p[0]] = decodeURIComponent(p[1].replace(/\+/g, " "));
-    }
-    return b;
-})(window.location.search.substring(1).split('&'));
-if (qs["find"]) {
-    words = qs["find"].split(',');
+//word search
+if (params.has('find')) {
+    words = params.get('find').split(',').map(w=>{ 
+        return {
+            word: w,
+            count: 0,
+            pos: 0,
+        }
+    });
     if (words.length > 0) {
-        var h = '<span class="hide">X</span>';
-        for (var i in words) {
-            h += '<span class="word" contenteditable>' + words[i] + '</span>';
+        //mark words in text
+        const regexp_str = '('+words.map(w=>w.word).join(')|(').replace(/\s+/g, '\\P{L}+')+')';
+        $("div.body").each(function(){
+            html = this.innerHTML;
+            let ch = false;
+            let prefix = '<span class="word" id="word-';
+            html = html.replace(new RegExp(regexp_str,'giu'), function(w) { 
+                let idx = undefined;
+                for (let i=1; i<arguments.length; i++) {
+                    if (arguments[i]!=undefined) {
+                        idx = i;
+                        break;
+                    }
+                }
+                if (idx==undefined) return;
+                idx -= 1;
+                let count = words[idx].count++;
+                ch ||= true;
+                return prefix+idx+'-'+count+'">'+w+'</span>';
+            });
+            if (ch) this.innerHTML = html;
+        });
+        //word buttons
+        let h = '<span class="hide">X</span>';
+        for (let i in words) {
+            h += '<span class="word" onclick="next_word('+i+')">' + words[i].word + '</span>';
         }
         $("body").append('<div class="find_words">' + h + '</div>');
     }
 }
 if (storage.getItem("hide_words")) {
     $('.find_words').hide();
-}  
+}
 
-function do_find(w) {
-    if (prev_find!=w) {
-        wc_idx = 0;
-        prev_find = w;
+function goto_word(n, pos) {
+    var e = $('#word-'+n+'-'+pos);
+    if (e.length) {
+        e.addClass('hl');
+        e[0].scrollIntoView({ "block": "center" });
     }
-    var p = word_count[w];
-    if (p==undefined) {
-        var id_prefix = 'w-'+(wc_max++)+'-';
-        // allow non-letter characters (punctuation) between words
-        var re = new RegExp(w.replace(/\s+/g, '\\P{L}+'), 'giu');
-        var idx = 0;
-        $("div.body").each(function(){
-            html = this.innerHTML.replace(re, function(m) { 
-                return '<span class="word" id="'+id_prefix+(idx++)+'">'+m+'</span>';
-            });
-            if (idx>0) this.innerHTML = html;
-        });
-        word_count[w] = p = [ id_prefix, idx ];
+}
+
+function next_word(n) {
+    let w = words[n];
+    if (w==undefined) return;
+    if (last_word_index!=n) {
+        w.pos = 0;
+        last_word_index = n;
     }
-    if (wc_idx >= p[1]) {
-        wc_idx = 0;
-    } else {
-        var id = '#' + p[0] + wc_idx;
-        var e = $(id);
-        if (e.length) {
-            e.addClass('hl');
-            e[0].scrollIntoView({ "block": "center" });
-        }
-        wc_idx += 1;
+    if (w.pos >= w.count) return;
+    goto_word(n, w.pos++);
+}
+
+function prev_word(n) {
+    let w = words[n];
+    if (w==undefined) return;
+    if (last_word_index!=n) {
+        w.pos = w.count-1;
+        last_word_index = n;
     }
+    if (w.pos <= 0) return;
+    var id = '#word-'+n+'-'+w.pos;
+    goto_word(n, w.pos--);
 }
 
 function hide_words() {
@@ -76,30 +91,12 @@ function show_words() {
 
 
 $(".find_words .hide").click(hide_words);
-$(".find_words .word").click(function () {
-    do_find($(this).text());
-}).dblclick(function (e) {
-    e.preventDefault();
-    var r = new Range();
-    r.setStart(this, 0);
-    r.setEnd(this, $(this).text().length - 1);
-    var s = document.getSelection();
-    s.empty();
-    s.addRange(r);
-}).keydown(function (e) {
-    if (e.keyCode == 13) {
-        e.preventDefault();
-        do_find($(this).text());
-    }
-});
 
-//enumerate paragraphs
 var para_num = 0;
-var paragraphs = []; //index for closest_para()
+var paragraphs = []; //[element]
 $('p').each(function(){
     paragraphs.push(this);
-    if (this.id) return;
-    $(this).attr('id', '_p'+(++para_num));
+    this.id ||= '_p'+(para_num++);
 });
 
 //plain numeric reference: [N] -> <p>N</p>
@@ -176,12 +173,8 @@ $("a[href^='#']").each(function () {
             if (link.length == 0) {
                 link = note;
             }
-            var id = a.attr("id");
-            if (!id) {
-                id = "back-" + href.substring(1);
-                a.attr("id", id);
-            }
-            link.wrapInner('<a class="backlink" href="#' + id + '"></a>');
+            this.id ||= "back-" + href.substring(1);
+            link.wrapInner('<a class="backlink" href="#' + this.id + '"></a>');
         }
     }
 });
@@ -189,28 +182,23 @@ $("a[href^='#']").each(function () {
 
 //table of contents
 var min_lvl = 100;
-var titles = [];
+var titles = []; //[[element,depth,text]]
 var num = 0;
 $(".title", $("div.body").first()).each(function (i, n) {
     var a = $(n);
     var T = a.text().trim();
     var L = a.parents().length;
     if (L < min_lvl) min_lvl = L;
-    var id = a.attr("id");
-    if (!id) {
-        id = "title-" + num;
-        a.attr("id", id);
-        num++;
-    }
-    titles.push([n, L, T, id]);
+    if (!n.id) n.id = "title-" + (num++);
+    titles.push([n, L, T]);
 });
 if (titles.length > 1) { //do not show empty TOC or one-line TOC
     var h = '';
     var p = -1;
     for (var i = 0; i < titles.length; i++) {
+        var id = titles[i][0].id;
         var L = titles[i][1] - min_lvl;
         var T = titles[i][2];
-        var id = titles[i][3];
         for (var x = p; x > L; x--) { h += '</ul>'; }
         for (var x = p; x < L; x++) { h += '<ul>'; }
         h += '<li><a href="#' + id + '">' + T + '</a></li>';
@@ -237,7 +225,7 @@ function closest_title() {
             a = i;
         }
     }
-    return titles[a][3];
+    return titles[a][0].id;
 }
 
 //paragraph closest to viewport' center, binary search in paragraphs array
@@ -466,8 +454,7 @@ function goto_bookmark(n) {
 
 window.addEventListener('keydown', function (e) {
     if (!e) e = window.event;
-    var code = e.code || e.keyCode;
-    switch (code) {
+    switch (e.code) {
         case 'KeyT': case 84:
             if ($(".toc:visible").length) {
                 $(".toc").hide()
@@ -486,13 +473,14 @@ window.addEventListener('keydown', function (e) {
             }
             break;
         case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4': case 'Digit5': case 'Digit6': case 'Digit7': case 'Digit8': case 'Digit9':
-        case 49: case 50: case 51: case 52: case 53: case 54: case 55: case 56: case 57: 
             e.preventDefault();
-            var n = Number(e.key);
+            var n = Number(e.key)-1;
             if (e.altKey) {
-                goto_bookmark(n-1);
-            } else {
-                if (n<=words.length) do_find(words[n-1]);
+                goto_bookmark(n);
+            } else if (e.ctrlKey) {
+                prev_word(n);
+            } else {    
+                next_word(n);
             }
             break;
         case 'Escape': case 27:
