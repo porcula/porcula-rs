@@ -219,18 +219,58 @@
             search(false);
         }
 
+        function count_re(s,re) {
+            var m = s.match(re); //default
+            return m==null ? 0 : m.length;
+        }
+
         $(".at_field span").click(function () {
+            // insert/replace field name
             var f = $(this).data("field") + ':';
             var q = $("#query");
             var v = q.val();
-            var i = q[0].selectionStart;
-            var j = q[0].selectionEnd;
-            var s1 = i > 0 ? v.substring(0, i) : "";
-            var s2 = j < v.length ? v.substring(j) : "";
-            if (s1.length > 0 && s1.substring(-1) != ' ') s1 += ' ';
-            var s = s1.length + f.length;
-            q.val(s1 + f + s2).focus();
-            q[0].selectionStart = q[0].selectionEnd = s;
+            var i = q[0].selectionEnd; //cursor position
+            var j = i;
+            var L = i > 0 ? v.substring(0, i) : "";
+            var R = i < v.length ? v.substring(i) : "";
+            if (i==v.length) { //end of string or empty string
+                if (i>0 && L[i-1]==':') { //replace
+                    i -= 1;
+                    while (i>=0 && L[i]!=' ') i--;
+                    L = L.substr(0,i+1);
+                } else if (i>0 && L[i-1] != ' ') {
+                    L += ' ';
+                }
+            } else { //inside text
+                //count quotes before cursor
+                var c = count_re(L,/"/g); //default
+                if (c==0) {
+                    c = count_re(L,/\p{Pi}/gu) + count_re(L,/\p{Pf}/gu); // opening+closing quotation marks, no nesting
+                }
+                if (c%2==1) { //inside quote
+                    i = j = L.lastIndexOf('"'); //start of quote
+                    if (i>0 && L[i-1]==':') { //has field
+                        while (i>=0 && L[i]!=' ') i--;
+                        i = (i<0) ? 0 : i+1;
+                    }
+                    L = v.substr(0,i)
+                    R = v.substr(j);
+                } else { //outside quote
+                    if (R.match(/^\S*:/)) { //inside field
+                        i += R.indexOf(':') + 1;
+                        L = v.substring(0, i);
+                        R = i < v.length ? v.substring(i) : "";
+                    }
+                    i = j = L.lastIndexOf(' '); //start of term
+                    i = (i<0) ? 0 : i+1;
+                    j = L.indexOf(':',i);
+                    j = (j<0) ? i : j+1;
+                    L = v.substr(0,i)
+                    R = v.substr(j);
+                }
+            }
+            q.val(L + f + R).focus();
+            q[0].selectionStart = q[0].selectionEnd = L.length+f.length;
         });
 
         function search(append) {
