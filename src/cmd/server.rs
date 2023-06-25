@@ -82,6 +82,7 @@ pub fn run_server(args: &ServerArgs, app: Application) -> ProcessResult {
         }
 
         router!(req,
+            (GET) (/about) => { Response::json::<AppInfo>(&APP_INFO) },
             (GET) (/index/info) => { handler_index_info(req, &app, &fts) },
             (GET) (/search) => { handler_search(req, &fts) },
             (GET) (/facet) => { handler_facet(req, &fts) },

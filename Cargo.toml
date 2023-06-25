@@ -1,7 +1,9 @@
 [package]
 name = "porcula"
+description = "FB2 library"
 version = "0.6.0"
 authors = ["alexey.s.v.br@gmail.com"]
+homepage = "https://github.com/porcula/porcula-rs"
 edition = "2018"
 publish = false
 

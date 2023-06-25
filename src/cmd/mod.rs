@@ -32,6 +32,22 @@ pub const COVER_IMAGE_WIDTH: u32 = 96;
 pub const COVER_IMAGE_HEIGHT: u32 = 144;
 pub const DEFAULT_COVER_IMAGE: &str = "defcover.png";
 
+#[derive(Serialize)]
+pub struct AppInfo {
+    name: &'static str,
+    description: &'static str,
+    authors: &'static str,
+    homepage: &'static str,
+    version: &'static str,
+}
+const APP_INFO: AppInfo = AppInfo {
+    name: env!("CARGO_PKG_NAME"),
+    description: env!("CARGO_PKG_DESCRIPTION"),
+    authors: env!("CARGO_PKG_AUTHORS"),
+    homepage: env!("CARGO_PKG_HOMEPAGE"),
+    version: env!("CARGO_PKG_VERSION"),
+};
+
 //language for user messages
 lazy_static! {
     pub static ref MESSAGE_LANG: String = {
