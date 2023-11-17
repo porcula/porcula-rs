@@ -8,8 +8,7 @@ use std::path::Path;
 use std::sync::Mutex;
 use tantivy::collector::{Count, FacetCollector, TopDocs};
 use tantivy::query::{
-    AllQuery, BooleanQuery, FuzzyTermQuery, Occur, Query, QueryParser,
-    RegexQuery, TermQuery,
+    AllQuery, BooleanQuery, FuzzyTermQuery, Occur, Query, QueryParser, RegexQuery, TermQuery,
 };
 use tantivy::schema::{
     Document, Facet, Field, IndexRecordOption, Schema, SchemaBuilder, Term, TextFieldIndexing,
@@ -694,12 +693,15 @@ impl BookReader {
                     OrderBy::Sequence => "sort_sequence",
                     _ => "sort_title",
                 };
-                let collector = TopDocs::with_limit(limit + offset).order_by_fast_field(sort_field, tantivy::Order::Asc);
+                let collector = TopDocs::with_limit(limit + offset)
+                    .order_by_fast_field(sort_field, tantivy::Order::Asc);
                 docs = searcher
                     .search(query, &collector)?
                     .iter()
                     .skip(offset)
-                    .map(|(_score, doc_address): &(u64, tantivy::DocAddress)| searcher.doc(*doc_address))
+                    .map(|(_score, doc_address): &(u64, tantivy::DocAddress)| {
+                        searcher.doc(*doc_address)
+                    })
                     .filter_map(|x| x.ok())
                     .collect();
                 match orderby {
@@ -900,9 +902,7 @@ impl BookReader {
             if let Some(m) = field_re.captures(&i) {
                 let field_name = m.get(1).unwrap().as_str();
                 let regex = m.get(2).unwrap().as_str();
-                let field = self
-                    .schema
-                    .get_field(field_name)?;
+                let field = self.schema.get_field(field_name)?;
                 let q = RegexQuery::from_pattern(regex, field)?;
                 queries.push((Occur::Must, Box::new(q)));
             } else {
@@ -921,9 +921,7 @@ impl BookReader {
                 let field_name = m.get(1).unwrap().as_str();
                 let pat = m.get(2).unwrap().as_str();
                 let (word, distance) = parse_fuzzy_pattern(pat);
-                let field = self
-                    .schema
-                    .get_field(field_name)?;
+                let field = self.schema.get_field(field_name)?;
                 let term = Term::from_field_text(field, &word);
                 let q = FuzzyTermQuery::new(term, distance, true);
                 queries.push((Occur::Must, Box::new(q)));

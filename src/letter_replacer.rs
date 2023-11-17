@@ -1,5 +1,5 @@
 use std::mem;
-use tantivy::tokenizer::{Tokenizer, Token, TokenFilter, TokenStream};
+use tantivy::tokenizer::{Token, TokenFilter, TokenStream, Tokenizer};
 
 #[derive(Clone)]
 pub struct LetterReplacer;
@@ -31,7 +31,6 @@ impl<T: Tokenizer> Tokenizer for LetterReplacerFilter<T> {
         }
     }
 }
-
 
 pub struct LetterReplacerTokenStream<T> {
     tail: T,
