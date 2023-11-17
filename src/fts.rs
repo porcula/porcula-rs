@@ -694,12 +694,12 @@ impl BookReader {
                     OrderBy::Sequence => "sort_sequence",
                     _ => "sort_title",
                 };
-                let collector = TopDocs::with_limit(limit + offset).order_by_u64_field(sort_field);
+                let collector = TopDocs::with_limit(limit + offset).order_by_fast_field(sort_field, tantivy::Order::Asc);
                 docs = searcher
                     .search(query, &collector)?
                     .iter()
                     .skip(offset)
-                    .map(|(_score, doc_address)| searcher.doc(*doc_address))
+                    .map(|(_score, doc_address): &(u64, tantivy::DocAddress)| searcher.doc(*doc_address))
                     .filter_map(|x| x.ok())
                     .collect();
                 match orderby {
