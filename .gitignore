@@ -10,7 +10,7 @@
 **/*.rs.bk
 
 /test
-/index
+/index*
 /books
 /Cargo.lock
 /.vscode

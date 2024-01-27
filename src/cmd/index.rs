@@ -2,7 +2,7 @@ use encoding_rs::Encoding;
 use log::{debug, error, info};
 use rayon::prelude::*;
 use regex::Regex;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fs::DirEntry;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -13,7 +13,7 @@ use crate::fts::{IndexListDetails, IndexedFiles};
 use crate::tr;
 use crate::types::Book;
 
-//const READ_BUFFER_SIZE: usize = 8 * 1024 * 1024;
+type LangStats = BTreeMap<String, usize>;
 
 #[derive(Default, Clone)]
 struct ProcessStats {
@@ -28,11 +28,21 @@ struct ProcessStats {
     time_to_unzip: Duration,
     time_to_parse: Duration,
     time_to_image: Duration,
+    langs: Option<LangStats>,
 }
 
 impl std::ops::Add for ProcessStats {
     type Output = Self;
     fn add(self, other: Self) -> Self {
+        let langs = if let Some(src) = other.langs {
+            let mut tgt = self.langs.unwrap_or_default();
+            for (lang, count) in src {
+                *(tgt.entry(lang).or_default()) += count;
+            }
+            Some(tgt)
+        } else {
+            None
+        };
         Self {
             error_count: self.error_count + other.error_count,
             warning_count: self.warning_count + other.warning_count,
@@ -45,6 +55,7 @@ impl std::ops::Add for ProcessStats {
             time_to_unzip: self.time_to_unzip + other.time_to_unzip,
             time_to_parse: self.time_to_parse + other.time_to_parse,
             time_to_image: self.time_to_image + other.time_to_image,
+            langs,
         }
     }
 }
@@ -67,10 +78,12 @@ struct ParsedBook {
     parsed_size: usize,
     time_to_parse: Duration,
     time_to_image: Duration,
+    lang: String,
 }
 
 #[derive(Default)]
 struct CommitStats {
+    commits_count: usize,
     book_indexed: usize,
     error_count: usize,
     time_to_commit: Duration,
@@ -78,6 +91,7 @@ struct CommitStats {
 
 #[allow(clippy::cognitive_complexity)]
 pub fn run_index(args: &IndexArgs, app: Application) -> ProcessResult {
+    let debug = log::log_enabled!(log::Level::Debug);
     let delta = args.mode == IndexMode::Delta;
     let mem = {
         use systemstat::{Platform, System};
@@ -248,6 +262,7 @@ pub fn run_index(args: &IndexArgs, app: Application) -> ProcessResult {
                     debug!("--------------Commit: start");
                     let ct = Instant::now();
                     book_writer.commit().unwrap();
+                    stats.commits_count += 1;
                     stats.time_to_commit += ct.elapsed();
                     debug!("--------------Commit: done");
                 }
@@ -256,6 +271,7 @@ pub fn run_index(args: &IndexArgs, app: Application) -> ProcessResult {
             debug!("Final commit: start");
             let ct = Instant::now();
             book_writer.commit().unwrap();
+            stats.commits_count += 1;
             if !commit_canceled.load(Ordering::SeqCst) {
                 debug!("Waiting for merging threads");
                 book_writer.wait_merging_threads().unwrap();
@@ -322,6 +338,9 @@ pub fn run_index(args: &IndexArgs, app: Application) -> ProcessResult {
                     let reader = std::fs::File::open(entry.path()).unwrap();
                     let mut zip = zip::ZipArchive::new(reader).unwrap();
                     let mut stats = ProcessStats::default();
+                    if debug {
+                        stats.langs = Some(LangStats::new());
+                    }
                     for i in first..last {
                         if canceled.load(Ordering::SeqCst) {
                             break;
@@ -361,6 +380,9 @@ pub fn run_index(args: &IndexArgs, app: Application) -> ProcessResult {
                             stats.parsed_size += parsed_book.parsed_size;
                             stats.time_to_parse += parsed_book.time_to_parse;
                             stats.time_to_image += parsed_book.time_to_image;
+                            if let Some(ref mut lang_stats) = stats.langs {
+                                *(lang_stats.entry(parsed_book.lang.clone()).or_default()) += 1;
+                            }
                             match parsed_book.state {
                                 BookState::Invalid => stats.error_count += 1,
                                 BookState::Ignored => stats.book_ignored += 1,
@@ -450,7 +472,8 @@ pub fn run_index(args: &IndexArgs, app: Application) -> ProcessResult {
             tr!["Warnings", "Предупреждений"],
             gstats.warning_count,
         );
-        if log::log_enabled!(log::Level::Debug) {
+        if debug {
+            debug!("Commits: {}", cstats.commits_count);
             let ue = gstats.time_to_unzip.as_millis() / args.read_threads as u128;
             let pe = gstats.time_to_parse.as_millis() / args.read_threads as u128;
             let ie = gstats.time_to_image.as_millis() / args.read_threads as u128;
@@ -462,6 +485,12 @@ pub fn run_index(args: &IndexArgs, app: Application) -> ProcessResult {
                 ie * 100 / total,
                 ce * 100 / total,
             );
+        }
+        if let Some(lang_stats) = gstats.langs {
+            debug!("Language stats:");
+            for (lang, count) in lang_stats {
+                debug!("\t{}\t{}", lang, count);
+            }
         }
     })
     .unwrap();
@@ -541,6 +570,7 @@ where
                 res.warning_count += b.warning.len();
                 debug!("  {}/{} -> {}", zipfile, filename, &b);
                 let lang = if !b.lang.is_empty() { &b.lang[0] } else { "" };
+                res.lang = lang.into();
                 if lang_filter(lang) {
                     if let Some(img) = b.cover_image {
                         let it = Instant::now();
@@ -571,7 +601,7 @@ where
                     res.state = BookState::Valid(Box::new(b));
                 } else {
                     res.state = BookState::Ignored;
-                    info!(
+                    debug!(
                         "{}/{} -> {} {}",
                         zipfile,
                         filename,
