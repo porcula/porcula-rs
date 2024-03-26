@@ -334,7 +334,7 @@ impl IndexSettings {
         let filename = index_path.join(INDEX_SETTINGS_FILE);
         let mut f = std::fs::File::create(&filename).unwrap();
         let json = serde_json::to_string(&self).unwrap();
-        match f.write(json.as_bytes()) {
+        match f.write_all(json.as_bytes()) {
             Ok(_) => Ok(()),
             Err(e) => Err(format!(
                 "{} {}: {}",
