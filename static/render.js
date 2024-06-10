@@ -502,5 +502,12 @@ window.addEventListener('keydown', function (e) {
         case 'Home': case 'End': case 36: case 35:
             set_auto_bookmark();
             break;
-    }
+        case 'KeyG': //vi's g=goto home | G=goto end
+            if (!e.ctrlKey && !e.altKey) {
+                set_auto_bookmark();
+                let y = e.shiftKey ? document.body.scrollHeight : 0;
+                window.scrollTo(0, y);
+            }
+            break;
+        }
 });
