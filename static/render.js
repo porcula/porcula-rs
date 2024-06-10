@@ -12,13 +12,14 @@ if (params.has('find')) {
         }
     });
     if (words.length > 0) {
-        //mark words in text
-        const regexp_str = '('+words.map(w=>w.word).join(')|(').replace(/\s+/g, '\\P{L}+')+')';
+        //mark words in text, excluding HTML attributes
+        const regexp_str = '(?<!="[^"^>^<]*)('+words.map(w=>w.word).join(')|(').replace(/\s+/g, '\\P{L}+')+')';
+        const regexp = new RegExp(regexp_str,'giu');
         $("div.body").each(function(){
             html = this.innerHTML;
             let ch = false;
             let prefix = '<span class="word" id="word-';
-            html = html.replace(new RegExp(regexp_str,'giu'), function(w) { 
+            html = html.replace(regexp, function(w) { 
                 let idx = undefined;
                 for (let i=1; i<arguments.length; i++) {
                     if (arguments[i]!=undefined) {
