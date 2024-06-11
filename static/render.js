@@ -12,9 +12,9 @@ if (params.has('find')) {
         }
     });
     if (words.length > 0) {
-        //mark words in text
+        //mark words in text, excluding HTML attributes
         //space in phrase can be non-letter character or entity
-        const regexp_str = '('+words.map(w=>w.word).join(')|(').replace(/\s+/g, '(\\P{L}|&[#a-z0-9]+;)+')+')';
+        const regexp_str = '(?<!="[^"^>^<]*)('+words.map(w=>w.word).join(')|(').replace(/\s+/g, '(\\P{L}|&[#a-z0-9]+;)+')+')';
         const regexp = new RegExp(regexp_str,'giu');
         $("div.body").each(function(){
             html = this.innerHTML;
@@ -503,5 +503,12 @@ window.addEventListener('keydown', function (e) {
         case 'Home': case 'End': case 36: case 35:
             set_auto_bookmark();
             break;
-    }
+        case 'KeyG': //vi's g=goto home | G=goto end
+            if (!e.ctrlKey && !e.altKey) {
+                set_auto_bookmark();
+                let y = e.shiftKey ? document.body.scrollHeight : 0;
+                window.scrollTo(0, y);
+            }
+            break;
+        }
 });

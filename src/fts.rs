@@ -700,9 +700,7 @@ impl BookReader {
                 docs = sorted_docs
                     .iter()
                     .skip(offset)
-                    .map(|(_score, doc_address): &(u64, DocAddress)| {
-                        searcher.doc(*doc_address)
-                    })
+                    .map(|(_score, doc_address): &(u64, DocAddress)| searcher.doc(*doc_address))
                     .filter_map(|x| x.ok())
                     .collect();
                 match orderby {

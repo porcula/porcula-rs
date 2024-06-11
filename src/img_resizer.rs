@@ -12,7 +12,12 @@ pub fn resize(src: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
             let mut buf = Vec::<u8>::new();
             let mut enc = JpegEncoder::new(&mut buf);
             let dim = dst.dimensions();
-            match enc.encode(&dst.into_rgb8(), dim.0, dim.1, image::ExtendedColorType::Rgb8) {
+            match enc.encode(
+                &dst.into_rgb8(),
+                dim.0,
+                dim.1,
+                image::ExtendedColorType::Rgb8,
+            ) {
                 Ok(()) => Ok(buf),
                 Err(e) => Err(e.to_string()),
             }
