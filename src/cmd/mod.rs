@@ -300,10 +300,10 @@ impl IndexSettings {
         };
         if let Some(Command::Index(args)) = &args.command {
             if !args.lang.is_empty() {
-                res.langs = args.lang.clone();
+                res.langs.clone_from(&args.lang);
             }
             if let Some(stemmer) = &args.stemmer {
-                res.stemmer = stemmer.clone();
+                res.stemmer.clone_from(stemmer);
             }
             if let Some(x) = &args.body {
                 res.options.body = *x == OnOff::On;
