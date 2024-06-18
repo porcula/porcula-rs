@@ -21,9 +21,9 @@ lto = "fat"
 strip = true
 
 [dependencies]
-tantivy = { version = "0.21", features = ["mmap"] }
-quick-xml = { version = "0.31", default-features = false, features = [] }
-zip = { version = "0.6", default-features = false, features = ["deflate"] }
+tantivy = { version = "0.22", features = ["mmap"] }
+quick-xml = { version = "0.32", default-features = false, features = [] }
+zip = { version = "2.1", default-features = false, features = ["deflate"] }
 image = { version = "0.25", default-features = false, features = ["jpeg","png","gif","bmp","webp"] }
 rouille = { version = "3.6", default-features = false }
 atom_syndication = "0.12"

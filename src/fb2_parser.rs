@@ -89,7 +89,7 @@ impl BookFormat for Fb2BookFormat {
             warning.push("malformed characters replaced".to_string());
         }
         let mut xml = quick_xml::Reader::from_str(xml_str.as_ref());
-        xml.trim_text(true);
+        xml.config_mut().trim_text(true);
         let mut mode = XMode::Start;
         let mut tag: Vec<u8> = vec![];
         let mut id: Option<String> = None;
@@ -512,7 +512,7 @@ impl BookFormat for Fb2BookFormat {
         let encoding = detect_xml_encoding(raw);
         let (xml_str, _enc, _malformed) = encoding.decode(raw);
         let mut xml = quick_xml::Reader::from_str(xml_str.as_ref());
-        xml.expand_empty_elements(true); //for compatibility with HTML4 <tag/> -> <tag></tag>
+        xml.config_mut().expand_empty_elements = true; //for compatibility with HTML4 <tag/> -> <tag></tag>
         let mut res = Vec::<Event>::new(); //generaged sequence of xhtml events
         let mut mode = XMode::Start;
         let mut in_book_title: bool = false;
@@ -719,7 +719,7 @@ impl BookFormat for Fb2BookFormat {
         let attrs = vec![Attribute::from(("class", "description"))];
         res.push(Event::Start(BytesStart::new("div").with_attributes(attrs)));
         let mut xml = quick_xml::Reader::from_str(&xml_str[description_start..description_end]);
-        xml.expand_empty_elements(true);
+        xml.config_mut().expand_empty_elements = true;
         loop {
             match xml.read_event() {
                 Err(_) => (), //ignore xml error

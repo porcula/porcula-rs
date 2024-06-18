@@ -3,6 +3,7 @@ use base64::{engine::general_purpose::STANDARD_NO_PAD as base64engine, Engine};
 use log::{debug, error};
 use rand::Rng;
 use regex::Regex;
+//use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Mutex;
@@ -11,8 +12,8 @@ use tantivy::query::{
     AllQuery, BooleanQuery, FuzzyTermQuery, Occur, Query, QueryParser, RegexQuery, TermQuery,
 };
 use tantivy::schema::{
-    Document, Facet, Field, IndexRecordOption, Schema, SchemaBuilder, Term, TextFieldIndexing,
-    TextOptions, Value, FAST, INDEXED, STORED, STRING,
+    Document, Facet, Field, IndexRecordOption, OwnedValue, Schema, SchemaBuilder, TantivyDocument,
+    Term, TextFieldIndexing, TextOptions, FAST, INDEXED, STORED, STRING,
 };
 use tantivy::tokenizer;
 use tantivy::{DocAddress, Order};
@@ -293,7 +294,7 @@ impl BookWriter {
     }
 
     pub fn mark_zipfile_as_indexed(&self, zipfile: &str, count: u64) -> Result<()> {
-        let mut doc = Document::default();
+        let mut doc = TantivyDocument::default();
         let facet = Facet::from_path(vec![WHOLE_MARKER, zipfile]);
         doc.add_facet(self.fields.facet, facet);
         doc.add_u64(self.fields.length, count); //books count
@@ -311,7 +312,7 @@ impl BookWriter {
         body: bool,
         xbody: bool,
     ) -> Result<()> {
-        let mut doc = Document::default();
+        let mut doc = TantivyDocument::default();
         doc.add_facet(self.fields.facet, file_facet(zipfile, filename)); //facet field is mandatory
         doc.add_text(self.fields.encoding, &book.encoding);
         doc.add_u64(self.fields.length, book.length);
@@ -464,41 +465,55 @@ impl BookWriter {
     }
 }
 
-fn first_string(doc: &Document, field: Field) -> Option<String> {
+fn first_string(doc: &TantivyDocument, field: Field) -> Option<String> {
     match doc.get_first(field) {
-        Some(Value::Str(s)) => Some(s.to_string()),
+        Some(OwnedValue::Str(s)) => Some(s.to_string()),
         _ => None,
     }
 }
 
-fn first_str(doc: &Document, field: Field) -> Option<&str> {
+fn first_str(doc: &TantivyDocument, field: Field) -> Option<&str> {
     match doc.get_first(field) {
-        Some(x) => x.as_text(),
+        Some(OwnedValue::Str(s)) => Some(s),
         _ => None,
     }
 }
 
-fn joined_values(doc: &Document, field: Field) -> String {
-    let v: Vec<&str> = doc.get_all(field).filter_map(|x| x.as_text()).collect();
+fn joined_values(doc: &TantivyDocument, field: Field) -> String {
+    let v: Vec<&str> = doc
+        .get_all(field)
+        .filter_map(|x| {
+            if let OwnedValue::Str(v) = x {
+                Some(v.as_ref())
+            } else {
+                None
+            }
+        })
+        .collect();
     v.join(", ")
 }
 
-fn vec_string(doc: &Document, field: Field) -> Vec<String> {
+fn vec_string(doc: &TantivyDocument, field: Field) -> Vec<String> {
     doc.get_all(field)
-        .filter_map(|x| x.as_text())
-        .map(|s| s.to_string())
+        .filter_map(|x| {
+            if let OwnedValue::Str(v) = x {
+                Some(v.clone())
+            } else {
+                None
+            }
+        })
         .collect()
 }
 
-fn first_i64_value(doc: &Document, field: Field) -> i64 {
+fn first_i64_value(doc: &TantivyDocument, field: Field) -> i64 {
     doc.get_first(field)
-        .map(|x| if let Value::I64(i) = x { *i } else { 0 })
+        .map(|x| if let OwnedValue::I64(i) = x { *i } else { 0 })
         .unwrap_or(0)
 }
 
-fn first_u64_value(doc: &Document, field: Field) -> u64 {
+fn first_u64_value(doc: &TantivyDocument, field: Field) -> u64 {
     doc.get_first(field)
-        .map(|x| if let Value::U64(i) = x { *i } else { 0 })
+        .map(|x| if let OwnedValue::U64(i) = x { *i } else { 0 })
         .unwrap_or(0)
 }
 
@@ -654,7 +669,7 @@ impl BookReader {
         orderby: OrderBy,
         limit: usize,
         offset: usize,
-    ) -> Result<Vec<Document>> {
+    ) -> Result<Vec<TantivyDocument>> {
         self.check_for_commit()?;
         let searcher = self.reader.searcher();
         debug!("query={:?} orderby={}", query, orderby);
@@ -672,7 +687,7 @@ impl BookReader {
                 //dummy sort: get top-N relevant docs, sort by random number and fetch [0..limit)
                 //offset is not applicable
                 let collector = TopDocs::with_limit(MAX_MATCHES_BEFORE_ORDERING);
-                let mut some_docs: Vec<Document> = searcher
+                let mut some_docs: Vec<TantivyDocument> = searcher
                     .search(query, &collector)?
                     .iter()
                     .map(|(_score, doc_address)| searcher.doc(*doc_address))
@@ -744,7 +759,7 @@ impl BookReader {
     ) -> Result<String> {
         let query = self.parse_query(query, stemming, disjunction)?;
         let docs = self.search_as_docs(&query, orderby, limit, offset)?;
-        let matches: Vec<String> = docs.iter().map(|doc| self.schema.to_json(doc)).collect();
+        let matches: Vec<String> = docs.iter().map(|doc| doc.to_json(&self.schema)).collect();
         let total = self.reader.searcher().search(&query, &Count)?;
         Ok(format!(
             "{{\"total\":{},\"matches\":[{}]}}",
@@ -770,7 +785,7 @@ impl BookReader {
             let mut filename = "".to_string();
             let mut genre = Vec::new();
             for i in doc.get_all(self.fields.facet) {
-                if let Value::Facet(f) = i {
+                if let OwnedValue::Facet(f) = i {
                     let mut path = f.to_path().into_iter();
                     let p0 = path.next();
                     let p1 = path.next();
