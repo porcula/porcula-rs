@@ -14,7 +14,7 @@ if (params.has('find')) {
     if (words.length > 0) {
         //mark words in text, excluding HTML attributes
         //space in phrase can be non-letter character or entity
-        const regexp_str = '(?<!="[^"^>^<]*)('+words.map(w=>w.word).join(')|(').replace(/\s+/g, '(\\P{L}|&[#a-z0-9]+;)+')+')';
+        const regexp_str = '(?<!="[^"^>^<]*)('+words.map(w=>w.word).join(')|(').replace(/\s+/g, '(?:\\P{L}|&[#a-z0-9]+;)+')+')';
         const regexp = new RegExp(regexp_str,'giu');
         $("div.body").each(function(){
             html = this.innerHTML;
